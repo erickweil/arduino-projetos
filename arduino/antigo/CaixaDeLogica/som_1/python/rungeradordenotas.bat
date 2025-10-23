@@ -1,0 +1,2 @@
+python frequency.py
+PAUSE

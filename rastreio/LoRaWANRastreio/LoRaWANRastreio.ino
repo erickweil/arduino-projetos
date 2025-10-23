@@ -51,7 +51,6 @@ uint16_t userChannelsMask[6] = {0x00FF, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000};
 // 1. Abrir https://resource.heltec.cn/search
 // 2. Colocar ID do dispositivo para obter license
 // 3. Enviar no console serial: AT+CDKEY=01234567012345670123456701234567
-uint32_t license[4] = {0x01234567, 0x01234567, 0x01234567, 0x01234567};
 */
 
 /*LoraWan region, select in arduino IDE tools

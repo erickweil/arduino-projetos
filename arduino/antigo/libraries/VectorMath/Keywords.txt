@@ -1,0 +1,3 @@
+Vector3 KEYWORD1
+dot KEYWORD2
+mag     KEYWORD2
