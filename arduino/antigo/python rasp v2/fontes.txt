@@ -1,0 +1,15 @@
+// especifico em emulação das portas seriais
+http://stackoverflow.com/questions/52187/virtual-serial-port-for-linux
+
+// rotacionar a tela lcd
+https://www.raspberrypi.org/forums/viewtopic.php?f=108&t=120785netflix.com
+
+
+// Comunicação serial com python
+
+http://www.embarcados.com.br/python-e-arduino-comunicacao-serial/
+https://hackingmajenkoblog.wordpress.com/2016/02/01/reading-serial-on-the-arduino/
+
+// Server com python
+http://bottlepy.org/docs/dev/
+http://bottlepy.org/docs/dev/tutorial.html#quickstart-hello-world
