@@ -1,0 +1,15 @@
+TargetMotor	KEYWORD1
+run	KEYWORD2
+posicao_para_passos	KEYWORD2
+passos_para_posicao	KEYWORD2
+setar_posicao_alvo	KEYWORD2
+setar_passos_alvo	KEYWORD2
+ler_posicao	KEYWORD2
+parar	KEYWORD2
+calibrar_fim_curso	KEYWORD2
+motor	KEYWORD2
+max_passos	KEYWORD2
+max_posicao	KEYWORD2
+passos_atual	KEYWORD2
+passos_alvo	KEYWORD2
+posicao_alvo	KEYWORD2
