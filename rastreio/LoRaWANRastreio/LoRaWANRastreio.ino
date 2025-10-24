@@ -7,8 +7,8 @@
     - https://br.mouser.com/datasheet/3/1574/1/esp32-s3_datasheet_en.pdf (Datasheet processador ESP32-S3FN8)
 */
 
-#include "LoRaWan_APP.h"
 #include "Arduino.h"
+#include "LoRaWan_APP.h"
 #include "HT_st7735.h"
 #include "HT_TinyGPS++.h"
 
