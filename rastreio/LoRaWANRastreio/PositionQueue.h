@@ -3,33 +3,14 @@
 
     A FAZER: Memória flash?
 */
-#ifndef POSICOES_FILA_SIZE
-#define POSICOES_FILA_SIZE 100
-#endif
 
 #ifndef POSITION_QUEUE_H
 #define POSITION_QUEUE_H
 
 #include <Arduino.h>
+#include "Position.h"
 
-// Dados de uma posição GPS (16 bytes)
-struct Posicao
-{
-    // 0
-    uint32_t timestamp; // Unix timestamp, seconds since 1970-01-01 UTC
-
-    // 4
-    int32_t lat;
-
-    // 8
-    int32_t lng;
-
-    // 12
-    uint8_t speed;  // 0-255 km/h
-    uint8_t course; // 0-360° -> 0-255°
-    uint8_t hdop;   // 0.1-100+ -> 0-255  Horizontal Dilution of Precision https://en.wikipedia.org/wiki/Dilution_of_precision
-    uint8_t sats;   // Number of satellites used in fix
-};
+#define POSICOES_FILA_SIZE 100U
 
 class PositionQueueClass
 {
@@ -40,6 +21,7 @@ public:
      * @return Número de posições atualmente armazenadas na fila.
      */
     size_t size() const;
+    size_t capacity() const;
     bool isEmpty() const;
 
     // Acessores para índices (úteis para integrar com código que escreve índice no payload)
@@ -56,7 +38,7 @@ public:
     /**
      * Irá marcar que todas as posições até SendIndex foram enviadas/consumidas.
      */
-    void commitSend();
+    bool commitSend();
 
     /**
      * Enfileira uma posição. Se a fila estiver cheia, sobrescreve a mais antiga.
@@ -69,11 +51,11 @@ public:
      * @param out Referência para onde a posição desenfileirada será copiada (só se retornar true).
      * @return true se havia uma posição para desenfileirar, false se a fila estava vazia.
      */
-    bool dequeueForSend(Posicao &out);
+    [[nodiscard]] bool dequeueForSend(Posicao &out);
 private:
-    static inline size_t incrementIndex(size_t idx, size_t capacity)
+    static inline size_t incrementIndex(size_t idx)
     {
-        return (idx + 1) % capacity;
+        return (idx + 1) % POSICOES_FILA_SIZE;
     }
 };
 

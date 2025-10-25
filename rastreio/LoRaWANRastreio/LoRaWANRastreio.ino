@@ -10,17 +10,17 @@
 
 #include "LoRaWan_APP.h"
 #include "HT_st7735.h"
-#include "HT_TinyGPS++.h"
-
-// Para conversões do tempo
 #include <time.h>
 
 // Configurações do projeto (LoRaWAN, etc)
 #include "config.h"
 
+// GPS principal usado pelo firmware
+#include "GpsModule.h"
+
+// Fila de posições armazenadas
 #include "PositionQueue.h"
 
-TinyGPSPlus GPS;
 HT_st7735 st7735;
 
 // extern's LoRaWan_APP.h
@@ -69,132 +69,15 @@ uint8_t appPort = 2;
 */
 uint8_t confirmedNbTrials = 6;
 
-/**
- * https://berthub.eu/articles/posts/how-to-get-a-unix-epoch-from-a-utc-date-time-string/
- * https://en.cppreference.com/w/c/chrono/tm
- */
-tm read_gps_time()
+void write_app_data(unsigned char *puc, int size)
 {
-    return {
-        .tm_sec = GPS.time.second(),       //  seconds after the minute – [​0​, 61](until C99)[​0​, 60](since C99)[note 1]
-        .tm_min = GPS.time.minute(),       //  minutes after the hour – [​0​, 59]
-        .tm_hour = GPS.time.hour(),        //  hours since midnight – [​0​, 23]
-        .tm_mday = GPS.date.day(),         //  day of the month – [1, 31]
-        .tm_mon = GPS.date.month() - 1,    //  months since January – [​0​, 11]
-        .tm_year = GPS.date.year() - 1900, //  years since 1900
-        .tm_isdst = 0                      //  Daylight Saving Time flag. The value is positive if DST is in effect, zero if not and negative if no information is available
-    };
-}
-
-/**
- * Processa os dados do GPS até que não haja mais linhas.
- * Caso demore mais de 15 segundos sem chegar nenhum dado ou em uma linha pela metade desiste.
- */
-bool wait_gps_info()
-{
-    uint32_t start = millis();
-    int c = -1;
-    // Flush pois o buffer irá conter linhas parciais inválidas
-    //while (Serial1.available() > 0 && Serial1.read() > 0)
-    //    ;
-    if(Serial1.available() > 0) {
-        while(c != '\n' || Serial1.available() > 0) {
-            if (Serial1.available() > 0) {
-                c = Serial1.read();
-            }
-
-            if ((millis() - start) > 10000)
-            {
-                Serial.println("Timeout: Nenhum dado GPS recebido após 10 segundos...");
-                return false;
-            }
-        }
-
-        c = -1;
-    }
-
-#if DEBUG_SERIAL
-    Serial.println("<GPS>");
-#endif
-    while (true)
+    if (appDataSize + size > LORAWAN_APP_DATA_MAX_SIZE)
     {
-        // Lê cada uma das linhas NMEA https://gpsd.gitlab.io/gpsd/NMEA.html
-        while (Serial1.available() > 0)
-        {
-            c = Serial1.read();
-#if DEBUG_SERIAL
-            Serial.print((char)c);
-#endif
-            GPS.encode(c);
-        }
-
-        // Se parou de ler em um fim de linha, encerrou os dados.
-        if (c == '\n')
-        {
-#if DEBUG_SERIAL
-            Serial.println("</GPS>");
-#endif
-            break;
-        }
-
-        // Timeout
-        if ((millis() - start) > 10000)
-        {
-#if DEBUG_SERIAL
-            Serial.println("</GPS>");
-#endif
-            Serial.println("Timeout: Nenhum dado GPS recebido após 10 segundos...");
-            return false;
-        }
+        Serial.println("tentou escrever appData mas excedeu LORAWAN_APP_DATA_MAX_SIZE!");
+        return;
     }
-
-    if (!GPS.time.isValid())
-    {
-        Serial.println("Tempo inválido, tentando novamente...");
-        return false;
-    }
-
-    return true;
-}
-
-/**
- * https://forum.arduino.cc/t/storing-latitute-and-longitude-using-a-double/670691/17
- * long integer format in degrees*(ten million) +/- 1 cm precision.
- * 
- * Converte a estrutura RawDegrees (usada pelo TinyGPS++) para um int32_t
- * com 7 casas decimais de precisão (escala de 1e7).
- * @param raw A estrutura RawDegrees (ex: GPS.location.rawLat()).
- * @return A coordenada como um int32_t (ex: -12.3456789 se torna -123456789).
- */
-int32_t rawDegreesToInt32(const RawDegrees &raw)
-{
-    // Fator de escala: 10,000,000 para 7 casas decimais
-    // 1. 12 graus -> 120,000,000
-    int32_t result = (int32_t)raw.deg * 10000000L;
-    
-    // Adicionamos 50 para arredondamento correto antes da divisão inteira
-    // Ex: 345,678,900 bilionésimos -> (345678900 + 50) / 100 = 3,456,789
-    //     120,000,000 + 3,456,789 = 123,456,789
-    result += (int32_t)((raw.billionths + 50UL) / 100UL);
-
-    // 4. Aplica o sinal negativo se necessário
-    if (raw.negative)
-    {
-        result = -result;
-    }
-
-    return result;
-}
-
-void write_app_data(unsigned char *puc, int size = 4)
-{
     for (int i = 0; i < size; i++)
     {
-        if (appDataSize >= LORAWAN_APP_DATA_MAX_SIZE)
-        {
-            Serial.println("appDataSize excedeu LORAWAN_APP_DATA_MAX_SIZE!");
-            return;
-        }
         appData[appDataSize++] = puc[i];
     }
 }
@@ -238,8 +121,8 @@ static void lerPosicao()
     char str_buf[15];
     for (int i = 0; i < 120; i++)
     {
-        bool gps_result = wait_gps_info();
-        bool gps_valid = GPS.location.isValid() && GPS.location.isUpdated();
+        bool gps_result = GPS.waitGpsInfo();
+        bool gps_valid = GPS.isValid() && GPS.isUpdated();
 
         st7735.st7735_fill_screen(ST7735_BLACK);
         // A FAZER: parar de usar classe String
@@ -248,13 +131,14 @@ static void lerPosicao()
         snprintf(str_buf, sizeof(str_buf), "%d ...%d", PositionQueue.getStart(), PositionQueue.size());
         st7735.st7735_write_str(0, 0, str_buf);
 
+        tm t = GPS.getTime();
         snprintf(str_buf, sizeof(str_buf), "%02d:%02d:%02d %s", 
-            GPS.time.hour(), GPS.time.minute(), GPS.time.second(), gps_valid ? "FIX" : "...");
+            t.tm_hour, t.tm_min, t.tm_sec, gps_valid ? "FIX" : "...");
         st7735.st7735_write_str(0, 20, str_buf);
 
-        snprintf(str_buf, sizeof(str_buf), "%.7f", GPS.location.lat());
+        snprintf(str_buf, sizeof(str_buf), "%.7f", GPS.getLatitude());
         st7735.st7735_write_str(0, 40, str_buf);
-        snprintf(str_buf, sizeof(str_buf), "%.7f", GPS.location.lng());
+        snprintf(str_buf, sizeof(str_buf), "%.7f", GPS.getLongitude());
         st7735.st7735_write_str(0, 60, str_buf);
 
         if (gps_result && gps_valid)
@@ -265,19 +149,19 @@ static void lerPosicao()
     }
 
     Posicao pos = {0, 0, 0, 0, 0, 0, 0};
-    tm t = read_gps_time();
+    tm t = GPS.getTime();
     /** Obter unix timestamp (seconds since 1970-01-01) válido a partir dos valores do GPS
-            https://pubs.opengroup.org/onlinepubs/009696799/functions/mktime.html              */
+        https://pubs.opengroup.org/onlinepubs/009696799/functions/mktime.html */
     pos.timestamp = (uint32_t)mktime(&t);
 
     // Converter latitude e longitude para formato inteiro em degrees*(ten million)
-    pos.lat = rawDegreesToInt32(GPS.location.rawLat());
-    pos.lng = rawDegreesToInt32(GPS.location.rawLng());
+    pos.lat = GPS.getLatitudeInt();
+    pos.lng = GPS.getLongitudeInt();
 
-    pos.course = (uint8_t)((GPS.course.deg() * 255.0 / 360.0) + 0.5);
-    pos.speed = (uint8_t)(min(GPS.speed.kmph() + 0.5, 255.0));
-    pos.hdop = (uint8_t)(min(GPS.hdop.hdop() * 10, 255.0) + 0.5);
-    pos.sats = (uint8_t)(min(GPS.satellites.value(), (uint32_t)255));
+    pos.course = (uint8_t)((GPS.getCourseDeg() * 255.0f / 360.0f) + 0.5f);
+    pos.speed = (uint8_t)(min(GPS.getSpeedKmph() + 0.5f, 255.0f));
+    pos.hdop = (uint8_t)(min(GPS.getHdop() * 10, 255.0f) + 0.5f);
+    pos.sats = (uint8_t)(min(GPS.getSatellites(), (uint32_t)255));
 
     // A FAZER: em modo CLASS_A, desligar Vext após um tempo sem uso, para economizar bateria
     // digitalWrite(Vext, LOW);
@@ -327,14 +211,13 @@ static void prepareTxFrame(uint8_t port)
 
     PositionQueue.resetSend();
     uint32_t inicio = (uint32_t)PositionQueue.getStart();
-    write_app_data((unsigned char *)(&inicio), 4);
+    write_app_data((unsigned char *)(&inicio), sizeof(inicio));
 
     Posicao pos;
     for (uint32_t i = 0; i < posicoes_para_enviar; i++)
     {
         //Posicao *pos = desenfileirar_posicao_envio();
-        bool ok = PositionQueue.dequeueForSend(pos);
-        if (!ok)
+        if (!PositionQueue.dequeueForSend(pos))
         {
             Serial.println("Erro ao obter posição da fila para envio.");
             break;
@@ -370,7 +253,10 @@ void downLinkAckHandle()
     Serial.print(PositionQueue.getSendIndex()-1);
     Serial.println(" como enviadas.");
     //posicoesInicio = posicoesEnvio;
-    PositionQueue.commitSend();
+    if (!PositionQueue.commitSend())
+    {
+        Serial.println("Aviso: commitSend chamado sem janela ativa.");
+    }
     mensagens_sem_ack = 0;
 }
 
@@ -390,7 +276,8 @@ void setup()
 
     // Start serial for GNS
     Serial.print("2... ");
-    Serial1.begin(115200, SERIAL_8N1, 33, 34);
+    //Serial1.begin(115200, SERIAL_8N1, 33, 34);
+    GPS.begin(Serial1, 115200, SERIAL_8N1, 33, 34);
 
     // Limpa tela e exibe boas vindas
     Serial.print("3... ");
@@ -398,7 +285,10 @@ void setup()
     st7735.st7735_init();
     st7735.st7735_fill_screen(ST7735_BLACK);
     delay(100);
-    st7735.st7735_write_str(0, 0, "Rastreio LoRaWAN");
+    st7735.st7735_write_str(0, 0,  "|Rastreio    |");
+    st7735.st7735_write_str(0, 20, "|     LoRaWAN|");
+    st7735.st7735_write_str(0, 40, "|------------|");
+    st7735.st7735_write_str(0, 60, "|Erick L Weil|");
 
     Serial.print("4... ");
     Mcu.begin(HELTEC_BOARD, SLOW_CLK_TPYE);

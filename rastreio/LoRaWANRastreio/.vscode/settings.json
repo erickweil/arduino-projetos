@@ -1,0 +1,9 @@
+{
+    "files.associations": {
+        "*.ejs": "html",
+        "*.mjml": "html",
+        ".env.swagger-definition.json": "json",
+        "*.h.example": "cpp",
+        "*.example": "cpp"
+    }
+}

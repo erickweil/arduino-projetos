@@ -8,6 +8,8 @@
 
 #include "PositionQueue.h"
 
+PositionQueueClass PositionQueue;
+
 // Rastreio, fila de posições armazenadas
 // Controle da fila de posições armazenadas em RTC memory (Mantém os dados após deep sleep)
 
@@ -21,8 +23,6 @@ RTC_DATA_ATTR static size_t posicoesEnvio = 0;
 // Índice da última posição armazenada na fila. Soma +1 após armazenar cada posição
 RTC_DATA_ATTR static size_t posicoesFim = 0;
 
-PositionQueueClass PositionQueue;
-
 PositionQueueClass::PositionQueueClass()
 {
     // Nothing to do; dados persistem em RTC
@@ -31,6 +31,11 @@ PositionQueueClass::PositionQueueClass()
 size_t PositionQueueClass::size() const
 {
     return (POSICOES_FILA_SIZE - posicoesInicio + posicoesFim) % POSICOES_FILA_SIZE;
+}
+
+size_t PositionQueueClass::capacity() const
+{
+    return POSICOES_FILA_SIZE - 1U;
 }
 
 bool PositionQueueClass::isEmpty() const
@@ -58,20 +63,26 @@ void PositionQueueClass::resetSend()
     posicoesEnvio = posicoesInicio;
 }
 
-void PositionQueueClass::commitSend()
+bool PositionQueueClass::commitSend()
 {
+    // Nada para confirmar
+    if(posicoesEnvio == posicoesInicio)
+    {
+        return false;
+    }
     posicoesInicio = posicoesEnvio;
+    return true;
 }
 
 void PositionQueueClass::enqueue(const Posicao &p)
 {
     posicoes[posicoesFim] = p;
-    posicoesFim = incrementIndex(posicoesFim, POSICOES_FILA_SIZE);
+    posicoesFim = incrementIndex(posicoesFim);
 
     // Se avançou o início, perdeu a posição mais antiga
     if (PositionQueue.isEmpty())
     {
-        posicoesInicio = incrementIndex(posicoesInicio, POSICOES_FILA_SIZE);
+        posicoesInicio = incrementIndex(posicoesInicio);
     }
 }
 
@@ -82,7 +93,7 @@ bool PositionQueueClass::dequeueForSend(Posicao &out)
         return false;
 
     out = posicoes[posicoesEnvio];
-    posicoesEnvio = incrementIndex(posicoesEnvio, POSICOES_FILA_SIZE);
+    posicoesEnvio = incrementIndex(posicoesEnvio);
     return true;
 }
 
