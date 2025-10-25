@@ -6,8 +6,8 @@
     - https://resource.heltec.cn/download/Wireless_Tracker/
     - https://br.mouser.com/datasheet/3/1574/1/esp32-s3_datasheet_en.pdf (Datasheet processador ESP32-S3FN8)
 */
-
 #include "Arduino.h"
+
 #include "LoRaWan_APP.h"
 #include "HT_st7735.h"
 #include "HT_TinyGPS++.h"
@@ -15,55 +15,27 @@
 // Para conversões do tempo
 #include <time.h>
 
-// https://github.com/esp8266/Arduino/blob/master/cores/esp8266/TZ.h
-#define TZ PSTR("UTC0")
-// #define TZ PSTR("<-04>4")
+// Configurações do projeto (LoRaWAN, etc)
+#include "config.h"
 
-// Para gerar o dev eui automaticamente
-#define LORAWAN_DEVEUI_AUTO 1
+#include "PositionQueue.h"
 
 TinyGPSPlus GPS;
 HT_st7735 st7735;
 
-// ============================================================================
-//                              Configurações LoRaWAN
-// ============================================================================
+// extern's LoRaWan_APP.h
+// Não alterar os nomes das variáveis ou quebra o código
 
-#include "arduino_secrets.h"
-/* ./arduino_secrets.h
-
-// OTAA para
-// EC 9E 13 9C 00 00 B4 C6
-uint8_t devEui[] = {0x22, 0x32, 0x33, 0x00, 0x00, 0x00, 0x00, 0x23};
-uint8_t appEui[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-uint8_t appKey[] = {0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88};
-// ABP para
-uint8_t nwkSKey[] = {0x15, 0xb1, 0xd0, 0xef, 0xa4, 0x63, 0xdf, 0xbe, 0x3d, 0x11, 0x18, 0x1e, 0x1e, 0xc7, 0xda, 0x85};
-uint8_t appSKey[] = {0xd7, 0x2c, 0x78, 0x75, 0x8c, 0xdc, 0xca, 0xbf, 0x55, 0xee, 0x4a, 0x77, 0x8d, 0x16, 0xef, 0x67};
-uint32_t devAddr = (uint32_t)0x007e6ae1;
-
-// LoraWan channelsmask, default channels 0-7
-uint16_t userChannelsMask[6] = {0x00FF, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000};
-
-// https://docs.heltec.org/general/how_to_use_license.html
-// Type	id	license	Production Place	Manufacture Data
-// ESP32	01234567879 	0x01234567,0x01234567,0x01234567,0x01234567	Chengdu	2025/07/20 12:46:08
-// 1. Abrir https://resource.heltec.cn/search
-// 2. Colocar ID do dispositivo para obter license
-// 3. Enviar no console serial: AT+CDKEY=01234567012345670123456701234567
-*/
+/*the application data transmission duty cycle.  value in [ms].*/
+uint32_t appTxDutyCycle = TX_DUTY_CYCLE;
 
 /*LoraWan region, select in arduino IDE tools
-
 Abrir Tools -> LoRaWAN Region -> REGION_AU915
 */
 LoRaMacRegion_t loraWanRegion = ACTIVE_REGION;
 
 /*LoraWan Class, Class A and Class C are supported*/
 DeviceClass_t loraWanClass = CLASS_C;
-
-/*the application data transmission duty cycle.  value in [ms].*/
-uint32_t appTxDutyCycle = 30000;
 
 /*OTAA or ABP*/
 bool overTheAirActivation = true;
@@ -96,84 +68,6 @@ uint8_t appPort = 2;
   the datarate, in case the LoRaMAC layer did not receive an acknowledgment
 */
 uint8_t confirmedNbTrials = 6;
-
-// ============================================================================
-//                      Variáveis Globais controle Rastreio
-// ============================================================================
-
-#define DEBUG_SERIAL 1
-
-#define POSICOES_FILA_SIZE 100
-
-// Início da fila. Soma +1 antes de enviar cada posição
-RTC_DATA_ATTR int32_t posicoesInicio = 0;
-// Início da fila. Soma +1 antes de enviar cada posição (Para envio)
-RTC_DATA_ATTR int32_t posicoesEnvio = 0;
-// Índice da última posição armazenada na fila. Soma +1 após armazenar cada posição
-RTC_DATA_ATTR int32_t posicoesFim = 0;
-
-// Dados de uma posição GPS (16 bytes)
-struct Posicao
-{
-    // 0
-    uint32_t timestamp; // Unix timestamp, seconds since 1970-01-01 UTC
-
-    // 4
-    int32_t lat;
-
-    // 8
-    int32_t lng;
-
-    // 12
-    uint8_t speed;  // 0-255 km/h
-    uint8_t course; // 0-360° -> 0-255°
-    uint8_t hdop;   // 0.1-100+ -> 0-255  Horizontal Dilution of Precision https://en.wikipedia.org/wiki/Dilution_of_precision
-    uint8_t sats;   // Number of satellites used in fix
-};
-// Buffer circular de posições armazenadas na fila
-RTC_DATA_ATTR Posicao posicoes[POSICOES_FILA_SIZE];
-
-RTC_DATA_ATTR uint32_t mensagens_sem_ack = 0;
-
-// BUG/A FAZER: em CLASS_A, millis() zera após deep sleep. Não pode depender de millis() para controlar tempos longos.
-// RTC_DATA_ATTR unsigned long millis_ultima_leitura = 0;
-
-// Será true quando estiver descarregando a fila de posições para envio (Evitar ler posições novas enquanto isso)
-RTC_DATA_ATTR bool descarregando_fila = false;
-
-void incrementar_indice_fila(int32_t &indice)
-{
-    indice = (indice + 1) % POSICOES_FILA_SIZE;
-}
-
-void enfileirar_posicao(Posicao *pos)
-{
-    posicoes[posicoesFim] = *pos;
-    incrementar_indice_fila(posicoesFim);
-
-    // Se avançou o início, perdeu a posição mais antiga
-    if (posicoesFim == posicoesInicio)
-    {
-        incrementar_indice_fila(posicoesInicio);
-    }
-}
-
-Posicao *desenfileirar_posicao_envio()
-{
-    // Fila vazia
-    if (posicoesEnvio == posicoesFim)
-        return NULL;
-
-    Posicao *pos = &posicoes[posicoesEnvio];
-    incrementar_indice_fila(posicoesEnvio);
-    return pos;
-}
-
-// Quantas posições estão armazenadas na fila
-uint32_t numero_posicoes()
-{
-    return (POSICOES_FILA_SIZE - posicoesInicio + posicoesFim) % POSICOES_FILA_SIZE;
-}
 
 /**
  * https://berthub.eu/articles/posts/how-to-get-a-unix-epoch-from-a-utc-date-time-string/
@@ -319,6 +213,14 @@ void print_app_data()
     Serial.println(" bytes)");
 }
 
+RTC_DATA_ATTR uint32_t mensagens_sem_ack = 0;
+
+// BUG/A FAZER: em CLASS_A, millis() zera após deep sleep. Não pode depender de millis() para controlar tempos longos.
+// RTC_DATA_ATTR unsigned long millis_ultima_leitura = 0;
+
+// Será true quando estiver descarregando a fila de posições para envio (Evitar ler posições novas enquanto isso)
+RTC_DATA_ATTR bool descarregando_fila = false;
+
 /* Prepares the payload of the frame */
 static void lerPosicao()
 {
@@ -343,7 +245,7 @@ static void lerPosicao()
         // A FAZER: parar de usar classe String
         //char buf[30]; // Buffer para formatar strings
         //snprintf(buf, 30, "Na fila: %d", numero_posicoes());
-        snprintf(str_buf, sizeof(str_buf), "%d ...%d", posicoesInicio, numero_posicoes());
+        snprintf(str_buf, sizeof(str_buf), "%d ...%d", PositionQueue.getStart(), PositionQueue.size());
         st7735.st7735_write_str(0, 0, str_buf);
 
         snprintf(str_buf, sizeof(str_buf), "%02d:%02d:%02d %s", 
@@ -380,7 +282,7 @@ static void lerPosicao()
     // A FAZER: em modo CLASS_A, desligar Vext após um tempo sem uso, para economizar bateria
     // digitalWrite(Vext, LOW);
 
-    enfileirar_posicao(&pos);
+    PositionQueue.enqueue(pos);
 }
 
 /**
@@ -409,7 +311,7 @@ static void prepareTxFrame(uint8_t port)
 
     appDataSize = 0;
 
-    uint32_t posicoes_faltando = numero_posicoes();
+    uint32_t posicoes_faltando = PositionQueue.size();
     if (posicoes_faltando <= 0)
     {
         Serial.println("Nenhuma posição para enviar.");
@@ -422,22 +324,26 @@ static void prepareTxFrame(uint8_t port)
     Serial.print("Preparando envio de ");
     Serial.print(posicoes_para_enviar);
     Serial.println(" posições...");
-    posicoesEnvio = posicoesInicio;
 
-    write_app_data((unsigned char *)(&posicoesInicio), 4);
+    PositionQueue.resetSend();
+    uint32_t inicio = (uint32_t)PositionQueue.getStart();
+    write_app_data((unsigned char *)(&inicio), 4);
+
+    Posicao pos;
     for (uint32_t i = 0; i < posicoes_para_enviar; i++)
     {
-        Posicao *pos = desenfileirar_posicao_envio();
-        if (pos == NULL)
+        //Posicao *pos = desenfileirar_posicao_envio();
+        bool ok = PositionQueue.dequeueForSend(pos);
+        if (!ok)
         {
             Serial.println("Erro ao obter posição da fila para envio.");
             break;
         }
-        write_app_data((unsigned char *)(pos), sizeof(Posicao));
+        write_app_data((unsigned char *)(&pos), sizeof(Posicao));
     }
 
     Serial.print("Enviando posição Nº ");
-    Serial.print(posicoesInicio);
+    Serial.print(inicio);
     Serial.print(": ");
 #if DEBUG_SERIAL
     print_app_data();
@@ -453,17 +359,18 @@ void downLinkAckHandle()
     Serial.println("ACK RECEBIDO! O pacote foi confirmado pelo servidor.");
 
     char str_buf[15];
-    snprintf(str_buf, sizeof(str_buf), "ACK: %d-%d", posicoesInicio, posicoesEnvio-1);
+    snprintf(str_buf, sizeof(str_buf), "ACK: %d-%d", PositionQueue.getStart(), PositionQueue.getSendIndex()-1);
     st7735.st7735_write_str(0, 0, str_buf);
     //st7735.st7735_write_str(0, 0, (String) "ACK:" + (String)posicoesInicio + " ..." + (String)numero_posicoes()); // Escreve no display
 
     // Remove a posição da fila
     Serial.print("Marcando posições de Nº ");
-    Serial.print(posicoesInicio);
+    Serial.print(PositionQueue.getStart());
     Serial.print(" a ");
-    Serial.print(posicoesEnvio-1);
+    Serial.print(PositionQueue.getSendIndex()-1);
     Serial.println(" como enviadas.");
-    posicoesInicio = posicoesEnvio;
+    //posicoesInicio = posicoesEnvio;
+    PositionQueue.commitSend();
     mensagens_sem_ack = 0;
 }
 
@@ -472,8 +379,9 @@ void setup()
     Serial.begin(115200);
     Serial.print("Inicializando ");
 
-    // Configuração Timezone
-    configTzTime(TZ, nullptr);
+    // https://github.com/esp8266/Arduino/blob/master/cores/esp8266/TZ.h
+    // Configuração Timezone. Deve ser UTC pois o GPS fornece tempo em UTC
+    configTzTime("UTC0", nullptr);
 
     // Enable Output 3.3V, power supply for built-in TFT and GNS
     Serial.print("1... ");
@@ -526,7 +434,7 @@ void loop()
     case DEVICE_STATE_SEND:
     {
         Serial.println("DEVICE_STATE_SEND");
-        if (numero_posicoes() <= 0 || descarregando_fila == false)
+        if (PositionQueue.size() <= 0 || descarregando_fila == false)
         {
             lerPosicao();
         }
@@ -553,14 +461,14 @@ void loop()
 
         uint32_t dutyCycleTime = appTxDutyCycle;
         // Se recebeu ACK recentemente e há mais posições na fila, envia mais rápido
-        if (mensagens_sem_ack <= 3 && numero_posicoes() > 1)
+        if (mensagens_sem_ack <= 3 && PositionQueue.size() > 1)
         {
             dutyCycleTime = 5000; // Envia próximo pacote em 5 segundos se houver mais posições na fila
             descarregando_fila = true;
 
             Serial.print("Mais posições na fila, enviando próximo pacote em 5 segundos... ");
             Serial.print("( faltam ");
-            Serial.print(numero_posicoes());
+            Serial.print(PositionQueue.size());
             Serial.println(" posições )");
         }
         // Schedule next packet transmission
