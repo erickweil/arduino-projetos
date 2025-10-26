@@ -7,8 +7,34 @@
 
 #include "ArduinoFake.h"
 #include <unity.h>
-#include <Serial1.h>
+#include "MySerial.h"
 
 #define RTC_DATA_ATTR
+
+using namespace fakeit;
+
+extern void implArduinoMocks()
+{
+    When(Method(ArduinoFake(), millis)).AlwaysDo([]() {
+        static unsigned long currentMillis = 0;
+        currentMillis += 1; // increment by 1 ms each call
+        return currentMillis;
+    });
+    When(OverloadedMethod(ArduinoFake(Serial), print, size_t(const char *))).AlwaysDo([](const char *str) {
+       return printf("%s", str);
+    });
+    When(OverloadedMethod(ArduinoFake(Serial), print, size_t(char))).AlwaysDo([](const char str) {
+       return printf("%c", str);
+    });
+    When(OverloadedMethod(ArduinoFake(Serial), println, size_t(const char *))).AlwaysDo([](const char *str) {
+       return printf("%s\n", str);
+    });
+    When(OverloadedMethod(ArduinoFake(Serial), println, size_t(char))).AlwaysDo([](const char str) {
+       return printf("%c\n", str);
+    });
+    When(OverloadedMethod(ArduinoFake(Serial), println, size_t())).AlwaysDo([]() {
+       return printf("\n");
+    });
+}
 
 #endif

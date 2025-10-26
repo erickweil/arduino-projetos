@@ -1,6 +1,5 @@
 #include <UnitTest.h>
-
-using namespace fakeit;
+#include "MySerial.cpp"
 
 #include "PositionQueue.h"
 #include "PositionQueue.cpp"
@@ -13,6 +12,7 @@ using namespace fakeit;
 
 void setUp(void) {
     ArduinoFakeReset();
+    implArduinoMocks();
     PositionQueue.resetForUnitTest();
 }
 
