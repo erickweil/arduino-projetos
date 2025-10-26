@@ -1,4 +1,3 @@
-#include "HT_TinyGPS++.h"
 #include "GpsModule.h"
 GPSClass GPS;
 
@@ -6,9 +5,9 @@ GPSClass GPS;
 // GPS principal usado pelo firmware
 static TinyGPSPlus TinyGPS;
 
-void GPSClass::begin(HardwareSerial &serialPort, uint32_t baudRate, SerialConfig config, int rxPin, int txPin)
+void GPSClass::setup()
 {
-    serialPort.begin(115200, SERIAL_8N1, 33, 34);
+    Serial1.begin(115200, SERIAL_8N1, 33, 34);
 }
 
 /**
@@ -128,7 +127,7 @@ double GPSClass::getLongitude() const
  * @param raw A estrutura RawDegrees (ex: GPS.location.rawLat()).
  * @return A coordenada como um int32_t (ex: -12.3456789 se torna -123456789).
  */
-int32_t rawDegreesToInt32(const RawDegrees &raw)
+int32_t GPSClass::rawDegreesToInt32(const RawDegrees &raw)
 {
     // Fator de escala: 10,000,000 para 7 casas decimais
     // 1. 12 graus -> 120,000,000
@@ -150,12 +149,12 @@ int32_t rawDegreesToInt32(const RawDegrees &raw)
 
 int32_t GPSClass::getLatitudeInt() const
 {
-    return rawDegreesToInt32(TinyGPS.location.rawLat());
+    return GPS.rawDegreesToInt32(TinyGPS.location.rawLat());
 }
 
 int32_t GPSClass::getLongitudeInt() const
 {
-    return rawDegreesToInt32(TinyGPS.location.rawLng());
+    return GPS.rawDegreesToInt32(TinyGPS.location.rawLng());
 }
 
 float GPSClass::getHdop() const

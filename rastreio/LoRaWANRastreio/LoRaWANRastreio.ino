@@ -277,7 +277,7 @@ void setup()
     // Start serial for GNS
     Serial.print("2... ");
     //Serial1.begin(115200, SERIAL_8N1, 33, 34);
-    GPS.begin(Serial1, 115200, SERIAL_8N1, 33, 34);
+    GPS.setup();
 
     // Limpa tela e exibe boas vindas
     Serial.print("3... ");

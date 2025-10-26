@@ -3,13 +3,14 @@
 
 #include <Arduino.h>
 #include <time.h>
+#include "HT_TinyGPS++.h"
 
 #define DEBUG_SERIAL 1
 
 class GPSClass
 {
 public:
-    void begin(HardwareSerial &serialPort, uint32_t baudRate, SerialConfig config, int rxPin, int txPin);
+    void setup();
     bool waitGpsInfo(uint32_t timeoutMs = 10000);
     bool isValid() const;
     bool isUpdated() const;
@@ -17,6 +18,7 @@ public:
     tm getTime() const;
     double getLatitude() const;
     double getLongitude() const;
+    int32_t rawDegreesToInt32(const RawDegrees &raw);
     int32_t getLatitudeInt() const;
     int32_t getLongitudeInt() const;
     float getHdop() const;

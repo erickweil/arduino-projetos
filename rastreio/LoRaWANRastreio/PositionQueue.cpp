@@ -28,6 +28,20 @@ PositionQueueClass::PositionQueueClass()
     // Nothing to do; dados persistem em RTC
 }
 
+#ifdef UNIT_TEST
+void PositionQueueClass::resetForUnitTest()
+{
+    // Reset indices and clear buffer for unit tests
+    posicoesInicio = 0;
+    posicoesEnvio = 0;
+    posicoesFim = 0;
+    for (size_t i = 0; i < POSICOES_FILA_SIZE; ++i)
+    {
+        posicoes[i] = Posicao{0, 0, 0, 0, 0, 0, 0};
+    }
+}
+#endif
+
 size_t PositionQueueClass::size() const
 {
     return (POSICOES_FILA_SIZE - posicoesInicio + posicoesFim) % POSICOES_FILA_SIZE;

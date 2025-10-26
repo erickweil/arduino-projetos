@@ -17,6 +17,14 @@ class PositionQueueClass
 public:
     PositionQueueClass();
 
+#ifdef UNIT_TEST
+    /**
+     * Helper para testes unitários: reseta índices e buffer.
+     * Só compilado quando UNIT_TEST está definido (ex: ambiente native).
+     */
+    void resetForUnitTest();
+#endif
+
     /**
      * @return Número de posições atualmente armazenadas na fila.
      */

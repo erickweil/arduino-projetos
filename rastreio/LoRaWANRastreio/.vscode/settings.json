@@ -4,6 +4,16 @@
         "*.mjml": "html",
         ".env.swagger-definition.json": "json",
         "*.h.example": "cpp",
-        "*.example": "cpp"
+        "*.example": "cpp",
+        "array": "cpp",
+        "deque": "cpp",
+        "string": "cpp",
+        "unordered_map": "cpp",
+        "unordered_set": "cpp",
+        "vector": "cpp",
+        "string_view": "cpp",
+        "format": "cpp",
+        "initializer_list": "cpp",
+        "span": "cpp"
     }
 }
