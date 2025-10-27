@@ -1,3 +1,6 @@
+#ifndef POSITION_H
+#define POSITION_H
+
 #include <Arduino.h>
 
 // Dados de uma posição GPS (16 bytes)
@@ -18,3 +21,5 @@ struct Posicao
     uint8_t hdop;   // 0.1-100+ -> 0-255  Horizontal Dilution of Precision https://en.wikipedia.org/wiki/Dilution_of_precision
     uint8_t sats;   // Number of satellites used in fix
 };
+
+#endif // POSITION_H
