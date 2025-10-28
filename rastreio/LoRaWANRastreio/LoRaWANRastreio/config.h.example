@@ -1,3 +1,6 @@
+#ifndef CONFIG_H
+#define CONFIG_H
+
 #include "Arduino.h"
 
 // ============================================================================
@@ -8,31 +11,34 @@
 // Para gerar o dev eui automaticamente a partir do chip id
 #define LORAWAN_DEVEUI_AUTO 1
 
-// OTAA para
-// EC 9E 13 9C 00 00 B4 C6
-uint8_t devEui[] = {0x22, 0x32, 0x33, 0x00, 0x00, 0x00, 0x00, 0x23};
-uint8_t appEui[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-uint8_t appKey[] = {0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88};
-// ABP para
-uint8_t nwkSKey[] = {0x15, 0xb1, 0xd0, 0xef, 0xa4, 0x63, 0xdf, 0xbe, 0x3d, 0x11, 0x18, 0x1e, 0x1e, 0xc7, 0xda, 0x85};
-uint8_t appSKey[] = {0xd7, 0x2c, 0x78, 0x75, 0x8c, 0xdc, 0xca, 0xbf, 0x55, 0xee, 0x4a, 0x77, 0x8d, 0x16, 0xef, 0x67};
-uint32_t devAddr = (uint32_t)0x007e6ae1;
-
-// LoraWan channelsmask, default channels 0-7
-uint16_t userChannelsMask[6] = {0x00FF, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000};
-
+/*
 // https://docs.heltec.org/general/how_to_use_license.html
 // Type	id	license	Production Place	Manufacture Data
-// ESP32	01234567879 	0x01234567,0x01234567,0x01234567,0x01234567	Chengdu	2025/07/20 12:46:08
+
 // 1. Abrir https://resource.heltec.cn/search
 // 2. Colocar ID do dispositivo para obter license
-// 3. Enviar no console serial: AT+CDKEY=01234567012345670123456701234567
-// uint32_t license[4] = {0x01234567, 0x01234567, 0x01234567, 0x01234567};
+// 3. Enviar no console serial: AT+CDKEY=????????????????????????????????
+// uint32_t license[4] = {0x????????, 0x????????, 0x????????,, 0x????????};
+*/
 
 // ============================================================================
 //                             RASTREIO CONFIGS
 // ============================================================================
 
+// Habilita debug serial detalhado
 #define DEBUG_SERIAL 1
 // Intervalo de envio de posições (ms)
 #define TX_DUTY_CYCLE 30000
+
+// ============================================================================
+//                             WIFI / DASHBOARD CONFIGS
+// ============================================================================
+
+#define WIFI_SSID "WIFI-SSID"
+#define WIFI_PASSWORD "WIFI-PASSWORD"
+#define WIFI_HOSTNAME "lorawan-rastreio"
+
+// Apenas para debug, habilita o servidor web para visualização das posições
+#define WEB_ADMIN 1
+
+#endif // CONFIG_H

@@ -1,0 +1,103 @@
+<html>
+
+<head>
+    <title>Rastreador - Wireless Tracker</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <style>
+        #table-container {
+            width: 90%;
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th,td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+
+<body style="display:flex;flex:1;flex-direction:column;align-items:center">
+    <h2>Rastreador - Wireless Tracker</h2>
+    <button style="padding:8px" onClick="myrefresh()">Atualizar</button>
+    <div id="info">
+
+    </div>
+    <div id="table-container">
+        <p style="padding: 20px; text-align: center;">Carregando dados...</p>
+    </div>
+
+    <script type="text/javascript">
+        let jsonData;
+        async function myrefresh() {
+            const container = document.getElementById('table-container');
+            const infoDiv = document.getElementById('info');
+            container.innerHTML = "<p style='padding: 20px; text-align: center;'>Atualizando...</p>";
+            jsonData = await fetch(`/info`, {
+                method: "GET",
+                headers: {
+                    "Accept": "application/json"
+                }
+            }).then((res) => {
+                return res.json();
+            });
+
+            // Atualiza as informações gerais
+            
+            const lorawan = jsonData["LoRaWAN"];
+            let infoHTML = "<b>LoRaWAN:</b><br/>";
+            infoHTML += `<span>Mensagens na fila: ${lorawan["queued"]}, Sem ACK: ${lorawan["withoutAck"]}</span><br/>`;
+            infoHTML += `<span>devEui: ${lorawan["devEui"]}, appEui: ${lorawan["appEui"]}, appKey: ${lorawan["appKey"]}</span><br/>`;
+            
+            const gps = jsonData["GPS"];
+            infoHTML += `<b>GPS:</b><br/>`;
+            infoHTML += `<span>Data: ${new Date(gps["data"]).toLocaleString()}</span><br/>`;
+            let latlong = `${gps["coords"][0]},${gps["coords"][1]}`;
+            infoHTML += `<span>Coordenadas: <a href="https://maps.google.com/?q=${latlong}" target="_blank">${latlong}</a></span><br/>`;
+            infoHTML += `<span>Velocidade: ${gps["vel"]} km/h, Direção: ${gps["dir"]}°, HDOP: ${gps["hdop"]}, Satélites: ${gps["satellites"]}</span><br/>`;
+            infoDiv.innerHTML = infoHTML;
+
+            let tableHtml = "<table>";
+
+            tableHtml += "<thead><tr>";
+            tableHtml += "<th>N</th><th>Data</th><th>Coords</th><th>Vel</th><th>Dir</th><th>HDOP</th><th>Sats</th>";
+            tableHtml += "</tr></thead>";
+
+            // 4. Cria as Linhas de Dados (tbody)
+            tableHtml += "<tbody>";
+            const historico = jsonData["historico"];
+            historico.forEach(row => {
+                tableHtml += "<tr>";
+
+                tableHtml += `<td>${row["n"]}</td>`;
+                tableHtml += `<td>${new Date(row["data"]).toLocaleString()}</td>`;
+                let latlong = `${row["coords"][0]},${row["coords"][1]}`;
+                tableHtml += `<td><a href="https://maps.google.com/?q=${latlong}" target="_blank">${latlong}</a></td>`;
+                tableHtml += `<td>${row["vel"]} km/h</td>`;
+                tableHtml += `<td>${row["dir"]}°</td>`;
+                tableHtml += `<td>${row["hdop"]}</td>`;
+                tableHtml += `<td>${row["satellites"]}</td>`;
+
+                tableHtml += "</tr>";
+            });
+            tableHtml += "</tbody></table>";
+
+            // 5. Injeta o HTML da tabela no contêiner
+            container.innerHTML = tableHtml;
+        }
+        window.onload = function () {
+            myrefresh();
+            setInterval(myrefresh, 30000);
+        }
+    </script>
+</body>
+
+</html>

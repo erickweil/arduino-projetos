@@ -24,11 +24,40 @@
 // Fila de posições armazenadas
 #include "PositionQueue.h"
 
+// Servidor web para visualização
+#ifdef WIFI_SSID
+#include "WifiService.h"
+#endif
+
 HT_st7735 st7735;
 
+#if WEB_ADMIN
+#include "WebServer.h"
+WebServer server(80);
+bool serverStarted = false;
+#endif
+
+// ============================================================================
+//                                Lógica Principal
+// ============================================================================
 class MyApp: public App
 {
 public:
+    void lerDadosGPS(Posicao &pos) {
+        tm t = GPS.getTime();
+        /** Obter unix timestamp (seconds since 1970-01-01) válido a partir dos valores do GPS
+            https://pubs.opengroup.org/onlinepubs/009696799/functions/mktime.html */
+        pos.timestamp = (uint32_t)mktime(&t);
+
+        // Converter latitude e longitude para formato inteiro em degrees*(ten million)
+        pos.lat = GPS.getLatitudeInt();
+        pos.lng = GPS.getLongitudeInt();
+
+        pos.course = (uint8_t)((GPS.getCourseDeg() * 255.0f / 360.0f) + 0.5f);
+        pos.speed = (uint8_t)(min(GPS.getSpeedKmph() + 0.5f, 255.0f));
+        pos.hdop = (uint8_t)(min(GPS.getHdop() * 10, 255.0f) + 0.5f);
+        pos.sats = (uint8_t)(min(GPS.getSatellites(), (uint32_t)255));
+    }
     // Chamado periodicamente para registrar uma nova leitura
     void onTimer() override
     {
@@ -37,7 +66,7 @@ public:
 
         // ~2 min Fix GPS
         char str_buf[15];
-        for (int i = 0; i < 10; i++)
+        for (int i = 0; i < 15; i++)
         {
             bool gps_result = GPS.waitGpsInfo();
             bool gps_valid = GPS.isValid() && GPS.isUpdated();
@@ -63,28 +92,20 @@ public:
                 break;
 
             // Wait 1 sec before trying again...
-            delay(1000);
+            delay(500);
         }
 
-        Posicao pos = {0, 0, 0, 0, 0, 0, 0};
-        tm t = GPS.getTime();
-        /** Obter unix timestamp (seconds since 1970-01-01) válido a partir dos valores do GPS
-            https://pubs.opengroup.org/onlinepubs/009696799/functions/mktime.html */
-        pos.timestamp = (uint32_t)mktime(&t);
-
-        // Converter latitude e longitude para formato inteiro em degrees*(ten million)
-        pos.lat = GPS.getLatitudeInt();
-        pos.lng = GPS.getLongitudeInt();
-
-        pos.course = (uint8_t)((GPS.getCourseDeg() * 255.0f / 360.0f) + 0.5f);
-        pos.speed = (uint8_t)(min(GPS.getSpeedKmph() + 0.5f, 255.0f));
-        pos.hdop = (uint8_t)(min(GPS.getHdop() * 10, 255.0f) + 0.5f);
-        pos.sats = (uint8_t)(min(GPS.getSatellites(), (uint32_t)255));
+        Posicao pos;
+        lerDadosGPS(pos);
 
         // A FAZER: em modo CLASS_A, desligar Vext após um tempo sem uso, para economizar bateria
         // digitalWrite(Vext, LOW);
 
         PositionQueue.enqueue(pos);
+
+#ifdef WIFI_SSID
+        st7735.st7735_write_str(0, 0, WifiService.getIP());
+#endif
     }
     // Chamado quando deve enviar dados
     void onSend() override
@@ -161,6 +182,96 @@ public:
 
 MyApp MyAppInstance;
 
+// ============================================================================
+//                          Página Administração Web
+// ============================================================================
+#if WEB_ADMIN
+// js/index.html https://www.toptal.com/developers/javascript-minifier https://kangax.github.io/html-minifier/
+const char HtmlIndexPage[] = R"rawliteral(
+<title>Rastreador - Wireless Tracker</title><meta content="width=device-width,initial-scale=1"name=viewport><style>#table-container{width:90%;overflow-x:auto}table{width:100%;border-collapse:collapse;margin-top:15px}td,th{border:1px solid #ddd;padding:8px;text-align:left}th{background-color:#f2f2f2}</style><body style=display:flex;flex:1;flex-direction:column;align-items:center><h2>Rastreador - Wireless Tracker</h2><button onclick=myrefresh() style=padding:8px>Atualizar</button><div id=info></div><div id=table-container><p style=padding:20px;text-align:center>Carregando dados...</div><script>let jsonData;async function myrefresh(){let t=document.getElementById("table-container"),a=document.getElementById("info");t.innerHTML="<p style='padding: 20px; text-align: center;'>Atualizando...</p>",jsonData=await fetch("/info",{method:"GET",headers:{Accept:"application/json"}}).then(t=>t.json());let e=jsonData.LoRaWAN,n="<b>LoRaWAN:</b><br/>";n+=`<span>Mensagens na fila: ${e.queued}, Sem ACK: ${e.withoutAck}</span><br/>`,n+=`<span>devEui: ${e.devEui}, appEui: ${e.appEui}, appKey: ${e.appKey}</span><br/>`;let o=jsonData.GPS;n+="<b>GPS:</b><br/>",n+=`<span>Data: ${new Date(o.data).toLocaleString()}</span><br/>`;let d=`${o.coords[0]},${o.coords[1]}`;n+=`<span>Coordenadas: <a href="https://maps.google.com/?q=${d}" target="_blank">${d}</a></span><br/>`,n+=`<span>Velocidade: ${o.vel} km/h, Dire\xe7\xe3o: ${o.dir}\xb0, HDOP: ${o.hdop}, Sat\xe9lites: ${o.satellites}</span><br/>`,a.innerHTML=n;let s="<table>";s+="<thead><tr>",s+="<th>N</th><th>Data</th><th>Coords</th><th>Vel</th><th>Dir</th><th>HDOP</th><th>Sats</th>",s+="</tr></thead>",s+="<tbody>";let r=jsonData.historico;r.forEach(t=>{s+="<tr>",s+=`<td>${t.n}</td>`,s+=`<td>${new Date(t.data).toLocaleString()}</td>`;let a=`${t.coords[0]},${t.coords[1]}`;s+=`<td><a href="https://maps.google.com/?q=${a}" target="_blank">${a}</a></td>`,s+=`<td>${t.vel} km/h</td>`,s+=`<td>${t.dir}\xb0</td>`,s+=`<td>${t.hdop}</td>`,s+=`<td>${t.satellites}</td>`,s+="</tr>"}),s+="</tbody></table>",t.innerHTML=s}window.onload=function(){myrefresh(),setInterval(myrefresh,3e4)};</script>
+)rawliteral";
+
+void webServerLoop()
+{
+    if (WiFi.status() != WL_CONNECTED)
+    {
+        if(serverStarted) {
+            server.stop();
+            serverStarted = false;
+        }
+        return;
+    }
+
+    if (!serverStarted)
+    {
+        server.begin();
+        serverStarted = true;
+        return;
+    }
+
+    server.handleClient();
+}
+
+void handleRoot()
+{
+    server.send(200, "text/html", HtmlIndexPage);    
+}
+
+void handlePositions()
+{
+    Posicao pos;
+    char str_buf[512];
+    int len_bytes = 0;
+    // Para enviar chunked.
+    server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+    server.send(200, "application/json", "{\n");
+
+    // Informações gerais:
+    // LoRaWAN: eui, addr, rssi, snr, acks,
+    // GPS: ultima posição, fix,
+    // Fila: tamanho, posições armazenadas, posições enviadas, últimas posições enviadas
+    
+    len_bytes = 0;
+    len_bytes += snprintf(str_buf, sizeof(str_buf), "\"LoRaWAN\":");
+    len_bytes += LoRaWANService.infoJson(str_buf + len_bytes, sizeof(str_buf) - len_bytes);
+    server.sendContent(str_buf, len_bytes);
+
+    MyAppInstance.lerDadosGPS(pos);
+    len_bytes = 0;
+    len_bytes += snprintf(str_buf, sizeof(str_buf), ",\n\"GPS\":");
+    len_bytes += PositionQueueClass::toJson(pos, 0, str_buf + len_bytes, sizeof(str_buf) - len_bytes);
+    server.sendContent(str_buf, len_bytes);
+
+    server.sendContent(",\n\"historico\":[\n");
+    size_t count = PositionQueue.getStart();
+    size_t pos_counter = 0;
+    size_t size = PositionQueue.capacity();
+    while(pos_counter < size && PositionQueue.getAt(pos_counter++, pos)) {
+        len_bytes = 0;
+        if(pos_counter > 1) {
+            len_bytes += snprintf(str_buf, sizeof(str_buf), ",\n");
+        }
+        len_bytes += PositionQueueClass::toJson(pos, count++, str_buf + len_bytes, sizeof(str_buf) - len_bytes);
+        server.sendContent(str_buf, len_bytes);
+    }
+    server.sendContent("]}\n");
+}
+
+void handleNotFound()
+{
+    server.send(404, "text/plain", "Not found");
+}
+
+void webServerSetup()
+{
+    // Inicializa o servidor web não bloqueante
+    server.on("/", handleRoot);
+    server.on("/info", handlePositions);
+    server.onNotFound(handleNotFound);
+    MDNS.addService("http", "tcp", 80);
+}
+#endif
+
 void setup()
 {
     Serial.begin(115200);
@@ -177,7 +288,6 @@ void setup()
 
     // Start serial for GNS
     Serial.print("2... ");
-    //Serial1.begin(115200, SERIAL_8N1, 33, 34);
     GPS.setup();
 
     // Limpa tela e exibe boas vindas
@@ -195,43 +305,24 @@ void setup()
     LoRaWANService.setup();
     LoRaWANService.app = &MyAppInstance;
 
+#ifdef WIFI_SSID
+    WifiService.setup();
+#endif
+
+#if WEB_ADMIN
+    webServerSetup();
+#endif
+
     Serial.println("OK!");
 }
 
-unsigned long millis_ultimo_sleep = 0;
-
 void loop()
 {
-    if(Serial.available())
-    {
-        char c = Serial.read();
-        if(c == 'r') {
-            Serial.println("Imprimindo posições na fila: [");
-            Posicao pos;
-            PositionQueue.resetSend();
-            while(PositionQueue.dequeueForSend(pos)) {
-                Serial.print("\t{ \"timestamp\": ");
-                Serial.print(pos.timestamp);
-                Serial.print(", \"lat\": ");
-                Serial.print(pos.lat);
-                Serial.print(", \"lng\": ");
-                Serial.print(pos.lng);
-                Serial.print(", \"speed\": ");
-                Serial.print(pos.speed);
-                Serial.print(", \"course\": ");
-                Serial.print(pos.course);
-                Serial.print(", \"hdop\": ");
-                Serial.print(pos.hdop);
-                Serial.print(", \"sats\": ");
-                Serial.print(pos.sats);
-                Serial.println(" },");
-            }
-            Serial.println("]");
-        } else if(c == 'p') {
-            Serial.println("Lendo nova posição GPS por comando serial...");
-            MyAppInstance.onTimer();
-        }
-    }
-
     LoRaWANService.loop();
+#ifdef WIFI_SSID
+    WifiService.loop();
+#endif
+#if WEB_ADMIN
+    webServerLoop();
+#endif
 }

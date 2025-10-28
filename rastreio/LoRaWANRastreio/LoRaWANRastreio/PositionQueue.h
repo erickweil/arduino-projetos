@@ -54,12 +54,16 @@ public:
      */
     void enqueue(const Posicao &p);
 
+    bool getAt(size_t index, Posicao &out) const;
+
     /**
      * Desenfileira a próxima posição para envio (Alterando apenas o índice de envio).
      * @param out Referência para onde a posição desenfileirada será copiada (só se retornar true).
      * @return true se havia uma posição para desenfileirar, false se a fila estava vazia.
      */
     [[nodiscard]] bool dequeueForSend(Posicao &out);
+
+    static int toJson(const Posicao &pos, uint32_t count, char * const str_buf, size_t str_buf_size);
 private:
     static inline size_t incrementIndex(size_t idx)
     {

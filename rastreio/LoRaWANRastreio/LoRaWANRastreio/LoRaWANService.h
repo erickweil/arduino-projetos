@@ -63,7 +63,7 @@ uint8_t appPort = 2;
   Note, that if NbTrials is set to 1 or 2, the MAC will not decrease
   the datarate, in case the LoRaMAC layer did not receive an acknowledgment
 */
-uint8_t confirmedNbTrials = 6;
+uint8_t confirmedNbTrials = 4;
 
 /**
  * appData size is LORAWAN_APP_DATA_MAX_SIZE which is defined in "commissioning.h".
@@ -148,7 +148,7 @@ public:
             appDataSize = 0;
             if (app != nullptr)
             {
-                if(app->getPendingMessages() <= 0 || millis_last_time == 0 || (millis() - millis_last_time > (appTxDutyCycle + 10000))) {
+                if(app->getPendingMessages() <= 0 || millis_last_time == 0 || (millis() - millis_last_time > (appTxDutyCycle + 15000))) {
                     app->onTimer();
                     millis_last_time = millis();
                 }
@@ -177,7 +177,7 @@ public:
             // Se recebeu ACK recentemente e há mais posições na fila, envia mais rápido
             if (mensagens_sem_ack <= 1 && app != nullptr && app->getPendingMessages() > 1)
             {
-                dutyCycleTime = 5000; // Envia próximo pacote em 5 segundos se houver mais posições na fila
+                dutyCycleTime = 10000; // Envia próximo pacote em 10 segundos se houver mais posições na fila
                 //descarregando_fila = true;
             }
             // Schedule next packet transmission
@@ -193,7 +193,7 @@ public:
             {
                 // Será que isso aqui funciona direito mesmo? SÓ FUNCIONA EM CLASS_C
                 if (millis_last_time == 0) millis_last_time = millis();
-                else if (millis() - millis_last_time > (appTxDutyCycle + 10000))
+                else if (millis() - millis_last_time > (appTxDutyCycle + 15000))
                 {
                     // Serial.println("Tempo sem leituras GPS excedido, lendo nova posição...");
                     app->onTimer();
@@ -245,6 +245,37 @@ public:
     uint32_t sendsWithoutAck()
     {
         return mensagens_sem_ack;
+    }
+
+    int infoJson(char * const str_buf, size_t str_buf_size)
+    {
+        int len_bytes = 0;
+        len_bytes += snprintf(str_buf, str_buf_size, "{\"queued\":%u,\"withoutAck\":%u",
+            app != nullptr ? app->getPendingMessages() : 0,
+            mensagens_sem_ack
+        );
+        
+        len_bytes += snprintf(str_buf + len_bytes, str_buf_size - len_bytes, ",\"devEui\":\"");
+        len_bytes += snprintf_hex(str_buf + len_bytes, str_buf_size - len_bytes, devEui, sizeof(devEui));
+        
+        len_bytes += snprintf(str_buf + len_bytes, str_buf_size - len_bytes, "\",\"appEui\":\"");
+        len_bytes += snprintf_hex(str_buf + len_bytes, str_buf_size - len_bytes, appEui, sizeof(appEui));
+
+        len_bytes += snprintf(str_buf + len_bytes, str_buf_size - len_bytes, "\",\"appKey\":\"");
+        len_bytes += snprintf_hex(str_buf + len_bytes, str_buf_size - len_bytes, appKey, sizeof(appKey));
+        len_bytes += snprintf(str_buf + len_bytes, str_buf_size - len_bytes, "\"}");
+        
+        return len_bytes;
+    }
+private:
+    int snprintf_hex(char * const str_buf, size_t str_buf_size, const uint8_t *data, size_t data_size)
+    {
+        int offset = 0;
+        for (size_t i = 0; i < data_size; i++)
+        {
+            offset += snprintf(str_buf + offset, str_buf_size - offset, "%02X", data[i]);
+        }
+        return offset;
     }
 };
 
