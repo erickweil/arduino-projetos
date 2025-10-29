@@ -10,6 +10,7 @@
 #include "MySerial.h"
 
 #define RTC_DATA_ATTR
+#define ACTIVE_REGION LORAMAC_REGION_AU915
 
 using namespace fakeit;
 
@@ -35,6 +36,10 @@ extern void implArduinoMocks()
     When(OverloadedMethod(ArduinoFake(Serial), println, size_t())).AlwaysDo([]() {
        return printf("\n");
     });
+}
+
+extern uint32_t randr(uint32_t min, uint32_t max) {
+   return min + (rand() % (max - min + 1));
 }
 
 #endif

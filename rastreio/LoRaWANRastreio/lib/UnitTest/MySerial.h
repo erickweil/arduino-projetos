@@ -12,10 +12,12 @@ public:
     int read();
     void print(const char *) {}
     void println(const char *) {}
-    // Feed data into the serial buffer
-    void feed(const char *s);
-    void clear();
+    // Methods for unit testing
+    void __feed(const char *s);
+    void __delay();
+    void __clear();
 private:
+    constexpr static char DELAY_SEP = (char)127; // DEL as separator for delays
     std::string buf;
     size_t idx;
     u_int32_t delay;

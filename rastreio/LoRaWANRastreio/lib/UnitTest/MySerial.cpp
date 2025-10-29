@@ -12,7 +12,17 @@ int MySerial::available() {
     }
 
     if (idx >= buf.size()) return 0;
-    return (int)(buf.size() - idx);
+
+    // Encontrar o próximo caractere divisor
+    size_t end = buf.find(DELAY_SEP, idx);
+
+    if(end != std::string::npos) {
+        // Há uma nova linha disponível
+        return (int)(end - idx + 1); // incluir o '\n'
+    } else {
+        // Não há nova linha, retornar o restante do buffer
+        return (int)(buf.size() - idx);
+    }
 }
 
 int MySerial::read() {
@@ -24,20 +34,25 @@ int MySerial::read() {
     if (idx >= buf.size()) return -1;
     unsigned char c = buf[idx++];
 
-    if(c == '\n') {
-        // Simula delay de chegada de nova linha
-        delay += 50;
+    if(idx < buf.size() && buf[idx] == DELAY_SEP) {
+        // Próximo caractere é um separador de atraso
+        delay = 50;
+        idx++; // pular o separador
     }
 
     return (int)c;
 }
 
-void MySerial::feed(const char *s) {
+void MySerial::__feed(const char *s) {
     if (!s) return;
     buf.append(s);
 }
 
-void MySerial::clear() {
+void MySerial::__delay() {
+    buf.push_back(DELAY_SEP);
+}
+
+void MySerial::__clear() {
     buf.clear();
     idx = 0;
     delay = 0;

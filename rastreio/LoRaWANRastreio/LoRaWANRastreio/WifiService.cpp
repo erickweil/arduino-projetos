@@ -1,5 +1,5 @@
 #include "WifiService.h"
-
+#ifdef WIFI_SSID
 WifiServiceClass WifiService;
 
 void WifiServiceClass::setup()
@@ -42,3 +42,4 @@ String WifiServiceClass::getIP()
         default: return "unknown";
     }
 }
+#endif
