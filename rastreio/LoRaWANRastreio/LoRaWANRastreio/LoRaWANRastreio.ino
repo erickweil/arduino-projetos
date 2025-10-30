@@ -35,6 +35,8 @@ HT_st7735 st7735;
 #include "WebServer.h"
 WebServer server(80);
 bool serverStarted = false;
+void webServerSetup();
+void webServerLoop();
 #endif
 
 // ============================================================================
@@ -182,6 +184,59 @@ public:
 
 MyApp MyAppInstance;
 
+void setup()
+{
+    Serial.begin(115200);
+    Serial.print("Inicializando ");
+
+    // https://github.com/esp8266/Arduino/blob/master/cores/esp8266/TZ.h
+    // Configuração Timezone. Deve ser UTC pois o GPS fornece tempo em UTC
+    configTzTime("UTC0", nullptr);
+
+    // Enable Output 3.3V, power supply for built-in TFT and GNS
+    Serial.print("1... ");
+    pinMode(Vext, OUTPUT);
+    digitalWrite(Vext, HIGH);
+
+    // Start serial for GNS
+    Serial.print("2... ");
+    GPS.setup();
+
+    // Limpa tela e exibe boas vindas
+    Serial.print("3... ");
+    delay(100);
+    st7735.st7735_init();
+    st7735.st7735_fill_screen(ST7735_BLACK);
+    delay(100);
+    st7735.st7735_write_str(0, 0,  "|Rastreio    |");
+    st7735.st7735_write_str(0, 20, "|     LoRaWAN|");
+    st7735.st7735_write_str(0, 40, "|------------|");
+    st7735.st7735_write_str(0, 60, "|Erick L Weil|");
+
+    Serial.print("4... ");
+    LoRaWANService.setup();
+    LoRaWANService.app = &MyAppInstance;
+
+#ifdef WIFI_SSID
+    WifiService.setup();
+#endif
+#if WEB_ADMIN
+    webServerSetup();
+#endif
+    Serial.println("OK!");
+}
+
+void loop()
+{
+    LoRaWANService.loop();
+#ifdef WIFI_SSID
+    WifiService.loop();
+#endif
+#if WEB_ADMIN
+    webServerLoop();
+#endif
+}
+
 // ============================================================================
 //                          Página Administração Web
 // ============================================================================
@@ -190,27 +245,6 @@ MyApp MyAppInstance;
 const char HtmlIndexPage[] = R"rawliteral(
 <title>Rastreador - Wireless Tracker</title><meta content="width=device-width,initial-scale=1"name=viewport><style>#table-container{width:90%;overflow-x:auto}table{width:100%;border-collapse:collapse;margin-top:15px}td,th{border:1px solid #ddd;padding:8px;text-align:left}th{background-color:#f2f2f2}</style><body style=display:flex;flex:1;flex-direction:column;align-items:center><h2>Rastreador - Wireless Tracker</h2><button onclick=myrefresh() style=padding:8px>Atualizar</button><div id=info></div><div id=table-container><p style=padding:20px;text-align:center>Carregando dados...</div><script>let jsonData;async function myrefresh(){let t=document.getElementById("table-container"),a=document.getElementById("info");t.innerHTML="<p style='padding: 20px; text-align: center;'>Atualizando...</p>",jsonData=await fetch("/info",{method:"GET",headers:{Accept:"application/json"}}).then(t=>t.json());let e=jsonData.LoRaWAN,n="<b>LoRaWAN:</b><br/>";n+=`<span>Mensagens na fila: ${e.queued}, Sem ACK: ${e.withoutAck}</span><br/>`,n+=`<span>devEui: ${e.devEui}, appEui: ${e.appEui}, appKey: ${e.appKey}</span><br/>`;let o=jsonData.GPS;n+="<b>GPS:</b><br/>",n+=`<span>Data: ${new Date(o.data).toLocaleString()}</span><br/>`;let d=`${o.coords[0]},${o.coords[1]}`;n+=`<span>Coordenadas: <a href="https://maps.google.com/?q=${d}" target="_blank">${d}</a></span><br/>`,n+=`<span>Velocidade: ${o.vel} km/h, Dire\xe7\xe3o: ${o.dir}\xb0, HDOP: ${o.hdop}, Sat\xe9lites: ${o.satellites}</span><br/>`,a.innerHTML=n;let s="<table>";s+="<thead><tr>",s+="<th>N</th><th>Data</th><th>Coords</th><th>Vel</th><th>Dir</th><th>HDOP</th><th>Sats</th>",s+="</tr></thead>",s+="<tbody>";let r=jsonData.historico;r.forEach(t=>{s+="<tr>",s+=`<td>${t.n}</td>`,s+=`<td>${new Date(t.data).toLocaleString()}</td>`;let a=`${t.coords[0]},${t.coords[1]}`;s+=`<td><a href="https://maps.google.com/?q=${a}" target="_blank">${a}</a></td>`,s+=`<td>${t.vel} km/h</td>`,s+=`<td>${t.dir}\xb0</td>`,s+=`<td>${t.hdop}</td>`,s+=`<td>${t.satellites}</td>`,s+="</tr>"}),s+="</tbody></table>",t.innerHTML=s}window.onload=function(){myrefresh(),setInterval(myrefresh,3e4)};</script>
 )rawliteral";
-
-void webServerLoop()
-{
-    if (WiFi.status() != WL_CONNECTED)
-    {
-        if(serverStarted) {
-            server.stop();
-            serverStarted = false;
-        }
-        return;
-    }
-
-    if (!serverStarted)
-    {
-        server.begin();
-        serverStarted = true;
-        return;
-    }
-
-    server.handleClient();
-}
 
 void handleRoot()
 {
@@ -270,59 +304,25 @@ void webServerSetup()
     server.onNotFound(handleNotFound);
     MDNS.addService("http", "tcp", 80);
 }
-#endif
 
-void setup()
+void webServerLoop()
 {
-    Serial.begin(115200);
-    Serial.print("Inicializando ");
+    if (WiFi.status() != WL_CONNECTED)
+    {
+        if(serverStarted) {
+            server.stop();
+            serverStarted = false;
+        }
+        return;
+    }
 
-    // https://github.com/esp8266/Arduino/blob/master/cores/esp8266/TZ.h
-    // Configuração Timezone. Deve ser UTC pois o GPS fornece tempo em UTC
-    configTzTime("UTC0", nullptr);
+    if (!serverStarted)
+    {
+        server.begin();
+        serverStarted = true;
+        return;
+    }
 
-    // Enable Output 3.3V, power supply for built-in TFT and GNS
-    Serial.print("1... ");
-    pinMode(Vext, OUTPUT);
-    digitalWrite(Vext, HIGH);
-
-    // Start serial for GNS
-    Serial.print("2... ");
-    GPS.setup();
-
-    // Limpa tela e exibe boas vindas
-    Serial.print("3... ");
-    delay(100);
-    st7735.st7735_init();
-    st7735.st7735_fill_screen(ST7735_BLACK);
-    delay(100);
-    st7735.st7735_write_str(0, 0,  "|Rastreio    |");
-    st7735.st7735_write_str(0, 20, "|     LoRaWAN|");
-    st7735.st7735_write_str(0, 40, "|------------|");
-    st7735.st7735_write_str(0, 60, "|Erick L Weil|");
-
-    Serial.print("4... ");
-    LoRaWANService.setup();
-    LoRaWANService.app = &MyAppInstance;
-
-#ifdef WIFI_SSID
-    WifiService.setup();
-#endif
-
-#if WEB_ADMIN
-    webServerSetup();
-#endif
-
-    Serial.println("OK!");
+    server.handleClient();
 }
-
-void loop()
-{
-    LoRaWANService.loop();
-#ifdef WIFI_SSID
-    WifiService.loop();
 #endif
-#if WEB_ADMIN
-    webServerLoop();
-#endif
-}

@@ -17,6 +17,9 @@ static const uint8_t LED_BUILTIN = SOC_GPIO_PIN_COUNT + 48;
 #define RGB_BUILTIN    LED_BUILTIN
 #define RGB_BRIGHTNESS 64
 
+// Correção erro que aparentemente só precisa essa variável e tudo funciona?
+#define GPIO_PIN_COUNT (SOC_GPIO_PIN_COUNT)
+
 static const uint8_t TX = 43;
 static const uint8_t RX = 44;
 

@@ -5,7 +5,6 @@
 #include <LoRaWan_APP.h>
 
 #include "config.h"
-
 // extern's LoRaWan_APP.h
 // Não alterar os nomes das variáveis ou quebra o código
 
