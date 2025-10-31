@@ -27,7 +27,7 @@ function generatreChirpstackLikePayload(info) {
     };
 }
 
-const ipAddress = "10.147.183.141"
+const ipAddress = "10.139.252.141"
 const jsonData = await fetch(`http://${ipAddress}/info`, {
     method: "GET",
     headers: {

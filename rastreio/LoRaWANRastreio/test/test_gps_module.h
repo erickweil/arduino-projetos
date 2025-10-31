@@ -27,6 +27,7 @@ const char *gpsStream = "$GPRMC,045103.000,A,3014.1984,N,09749.2872,W,0.67,161.4
  */
 void test_raw_degrees_simple()
 {
+    GPSClass GPS;
     // 12 degrees, 345,678,900 billionths => 12.3456789 -> 123456789
     RawDegrees raw;
 
@@ -52,6 +53,8 @@ void test_raw_degrees_simple()
  */
 void test_parse_nmea_full()
 {
+    GPSClass GPS;
+    
     Serial1.__clear();
     Serial1.__feed(",,,A*7D\r\n$GPGGA,045252.000,3014.4273,N,09749.0628,W,1,09,1.3,206.9,M,-22.5,M,,0000*6F\r\n");
     Serial1.__delay();

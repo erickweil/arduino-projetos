@@ -6,7 +6,7 @@ using namespace fakeit;
 
 void test_enqueue_and_size()
 {
-    PositionQueue.resetForUnitTest();
+    PositionQueueClass PositionQueue;
     Posicao p1 = {1, 123456789, -123456789, 10, 20, 30, 4};
     TEST_ASSERT_EQUAL_UINT32(0, PositionQueue.size());
     PositionQueue.enqueue(p1);
@@ -15,11 +15,11 @@ void test_enqueue_and_size()
 
 void test_dequeue_for_send_and_commit()
 {
-    // Ensure clean state
+    PositionQueueClass PositionQueue;
+
     Posicao p1 = {10, 100000000, 200000000, 5, 10, 20, 6};
     Posicao p2 = {11, 110000000, 210000000, 6, 11, 21, 7};
-
-    PositionQueue.resetForUnitTest();
+    
     PositionQueue.enqueue(p1);
     PositionQueue.enqueue(p2);
     TEST_ASSERT_EQUAL_UINT32(2, PositionQueue.size());
@@ -39,7 +39,7 @@ void test_dequeue_for_send_and_commit()
 
 void test_wrap_around_and_overwrite()
 {
-    PositionQueue.resetForUnitTest();
+    PositionQueueClass PositionQueue;
 
     const size_t cap = PositionQueue.capacity();
     // fill with capacity + 2 to force overwrite of oldest
@@ -65,7 +65,8 @@ void test_wrap_around_and_overwrite()
 
 void test_commit_send_behavior()
 {
-    PositionQueue.resetForUnitTest();
+    PositionQueueClass PositionQueue;
+
     // empty queue: commitSend should be false
     TEST_ASSERT_FALSE(PositionQueue.commitSend());
 
@@ -90,7 +91,8 @@ void test_commit_send_behavior()
 
 void test_overwrite_content()
 {
-    PositionQueue.resetForUnitTest();
+    PositionQueueClass PositionQueue;
+
     const size_t cap = PositionQueue.capacity();
     // enqueue values 1..(cap+3)
     for (size_t i = 1; i <= cap + 3; ++i)
@@ -113,7 +115,8 @@ void test_overwrite_content()
 
 void test_queue_get_at()
 {
-    PositionQueue.resetForUnitTest();
+    PositionQueueClass PositionQueue;
+    
     const size_t cap = PositionQueue.capacity();
     // enqueue values 1..cap
     for (size_t i = 1; i <= cap; ++i)

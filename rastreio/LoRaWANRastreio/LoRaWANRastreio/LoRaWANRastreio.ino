@@ -29,8 +29,6 @@
 #include "WifiService.h"
 #endif
 
-HT_st7735 st7735;
-
 #if WEB_ADMIN
 #include "WebServer.h"
 WebServer server(80);
@@ -38,6 +36,12 @@ bool serverStarted = false;
 void webServerSetup();
 void webServerLoop();
 #endif
+
+HT_st7735 st7735;
+GPSClass GPS;
+WifiServiceClass WifiService;
+PositionQueueClass PositionQueue;
+LoRaWANServiceClass LoRaWANService;
 
 // ============================================================================
 //                                Lógica Principal
@@ -214,9 +218,7 @@ void setup()
     st7735.st7735_write_str(0, 60, "|Erick L Weil|");
 
     Serial.print("4... ");
-    LoRaWANService.setup();
-    LoRaWANService.app = &MyAppInstance;
-
+    LoRaWANService.setup(&MyAppInstance);
 #ifdef WIFI_SSID
     WifiService.setup();
 #endif

@@ -110,13 +110,11 @@ class LoRaWANServiceClass
 public:
     App *app = nullptr;
 
-    LoRaWANServiceClass(App *appInstance)
-    {
-        app = appInstance;
-    }
+    LoRaWANServiceClass() { }
 
-    void setup()
+    void setup(App *app_instance)
     {
+        app = app_instance;
 #ifndef UNIT_TEST
         Mcu.begin(HELTEC_BOARD, SLOW_CLK_TPYE);
 #endif
@@ -280,7 +278,7 @@ private:
     }
 };
 
-LoRaWANServiceClass LoRaWANService(nullptr);
+extern LoRaWANServiceClass LoRaWANService;
 
 void downLinkAckHandle()
 {
