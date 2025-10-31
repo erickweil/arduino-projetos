@@ -54,7 +54,13 @@ void test_raw_degrees_simple()
 void test_parse_nmea_full()
 {
     GPSClass GPS;
+    bool ok;
     
+    Serial1.__clear();
+
+    ok = GPS.waitGpsInfo(500);
+    TEST_ASSERT_FALSE(ok);
+
     Serial1.__clear();
     Serial1.__feed(",,,A*7D\r\n$GPGGA,045252.000,3014.4273,N,09749.0628,W,1,09,1.3,206.9,M,-22.5,M,,0000*6F\r\n");
     Serial1.__delay();
@@ -63,10 +69,9 @@ void test_parse_nmea_full()
     TEST_ASSERT_TRUE(Serial1.available() > 0);
     TEST_ASSERT_TRUE(millis() >= 0);
 
-    bool ok = GPS.waitGpsInfo(2000);
+    ok = GPS.waitGpsInfo(500);
     TEST_ASSERT_TRUE(ok);
     
-    TEST_ASSERT_TRUE(GPS.isValid());
     TEST_ASSERT_TRUE(GPS.isUpdated());
 
     tm timeinfo = GPS.getTime();
@@ -91,9 +96,46 @@ void test_parse_nmea_full()
     TEST_ASSERT_EQUAL_INT32(-978177133, lngInt);
 }
 
+void test_course_diff()
+{
+    // Test with same course
+    double course1 = 45.0;
+    double course2 = 45.0;
+    double diff = GPSClass::absCourseDiff(course1, course2);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001, 0.0, diff);
+
+    // Test with different courses
+    course1 = 30.0;
+    course2 = 60.0;
+    diff = GPSClass::absCourseDiff(course1, course2);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001, 30.0, diff);
+
+    // Test with wrap-around case
+    course1 = 350.0;
+    course2 = 10.0;
+    diff = GPSClass::absCourseDiff(course1, course2);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001, 20.0, diff);
+
+    for(uint32_t i = 0; i < 360; i++) 
+    {
+        course1 = 0;
+        course2 = i;
+        diff = GPSClass::absCourseDiff(course1, course2);
+        if (i <= 180) 
+        {
+            TEST_ASSERT_FLOAT_WITHIN(0.0001, i, diff);
+        } 
+        else 
+        {
+            TEST_ASSERT_FLOAT_WITHIN(0.0001, 360 - i, diff);
+        }
+    }
+}
+
 
 void test_gps_module()
 {
     RUN_TEST(test_raw_degrees_simple);
     RUN_TEST(test_parse_nmea_full);
+    RUN_TEST(test_course_diff);
 }

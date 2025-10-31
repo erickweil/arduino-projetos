@@ -18,88 +18,106 @@ public:
         Serial1.begin(115200, SERIAL_8N1, 33, 34);
     }
 
+    bool loop()
+    {
+        // A FAZER: Detectar que o buffer encheu demais e tem linhas inválidas, e fazer flush nessa situação.
+        // flushGps(0)
+
+        if(!waitGpsInfo(0, false)) 
+            return false;
+
+        return true;
+    }
+
+    bool flushGps(uint32_t timeoutMs)
+    {
+        if (Serial1.available() <= 0)
+        {
+            return true;
+        }
+
+        uint32_t start = millis();
+        int c = -1;
+        // while (Serial1.available() > 0 && Serial1.read() > 0)
+        //    ;
+        while (c != '\n' || Serial1.available() > 0)
+        {
+            if (Serial1.available() > 0)
+            {
+                c = Serial1.read();
+            }
+
+            if (timeoutMs == 0 || (millis() - start) > timeoutMs)
+            {
+                if (timeoutMs != 0) {
+                    Serial.print("Timeout: Nenhum dado GPS recebido após ms:"); Serial.println(timeoutMs);
+                }
+
+                return false;
+            }
+        }
+
+        return true;        
+    }
+
     /**
      * Processa os dados do GPS até que não haja mais linhas.
-     * Caso demore mais de 15 segundos sem chegar nenhum dado ou em uma linha pela metade desiste.
+     * Caso demore mais de 10 segundos sem chegar nenhum dado ou em uma linha pela metade desiste.
      */
-    bool waitGpsInfo(uint32_t timeoutMs = 10000)
+    bool waitGpsInfo(uint32_t timeoutMs = 10000, bool flush = true)
     {
         uint32_t start = millis();
         int c = -1;
-        // Flush pois o buffer irá conter linhas parciais inválidas
-        // while (Serial1.available() > 0 && Serial1.read() > 0)
-        //    ;
-        if (Serial1.available() > 0)
+
+        // Flush pois o buffer pode conter linhas parciais inválidas
+        if(flush) 
         {
-            while (c != '\n' || Serial1.available() > 0)
+            if(!flushGps(timeoutMs)) 
             {
-                if (Serial1.available() > 0)
-                {
-                    c = Serial1.read();
-                }
-
-                if ((millis() - start) > 10000)
-                {
-                    Serial.println("Timeout: Nenhum dado GPS recebido após 10 segundos...");
-                    return false;
-                }
+                return false;
             }
-
-            c = -1;
         }
 
-#if DEBUG_SERIAL
-        Serial.println("<GPS>");
-#endif
         while (true)
         {
             // Lê cada uma das linhas NMEA https://gpsd.gitlab.io/gpsd/NMEA.html
             while (Serial1.available() > 0)
             {
                 c = Serial1.read();
-#if DEBUG_SERIAL
-                Serial.print((char)c);
-#endif
+//# if DEBUG_SERIAL
+                //Serial.print((char)c);
+//# endif
                 TinyGPS.encode(c);
             }
 
             // Se parou de ler em um fim de linha, encerrou os dados.
             if (c == '\n')
             {
-#if DEBUG_SERIAL
-                Serial.println("</GPS>");
-#endif
                 break;
             }
 
             // Timeout
-            if ((millis() - start) > 10000)
+            if (timeoutMs == 0 || (millis() - start) > timeoutMs)
             {
-#if DEBUG_SERIAL
-                Serial.println("</GPS>");
-#endif
-                Serial.println("Timeout: Nenhum dado GPS recebido após 10 segundos...");
+                if (timeoutMs != 0) {
+                    Serial.print("Timeout: Nenhum dado GPS recebido após ms:"); Serial.println(timeoutMs);
+                }
+
                 return false;
             }
         }
 
-        if (!TinyGPS.time.isValid())
-        {
-            Serial.println("Tempo inválido, tentando novamente...");
-            return false;
-        }
-
-        return true;
-    }
-
-    bool isValid() const
-    {
-        return TinyGPS.location.isValid();
+        return TinyGPS.time.isValid() && TinyGPS.location.isValid();
     }
 
     bool isUpdated() const
     {
         return TinyGPS.location.isUpdated();
+    }
+
+    uint32_t getLocationAge()
+    {
+        return TinyGPS.location.age();
     }
 
     /**
@@ -186,6 +204,16 @@ public:
     uint32_t getSatellites()
     {
         return TinyGPS.satellites.value();
+    }
+
+    // https://math.stackexchange.com/questions/110173/how-to-calculate-relative-degree-changes-in-0-to-360
+    static float absCourseDiff(float lastCourse, float course) {
+        float diff = abs(lastCourse - course);
+        if(diff > 180.0f) {
+            return 360.0f - diff;
+        } else {
+            return diff;
+        }
     }
 };
 

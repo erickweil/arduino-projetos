@@ -33,6 +33,17 @@ extern void implArduinoMocks()
     When(OverloadedMethod(ArduinoFake(Serial), println, size_t(char))).AlwaysDo([](const char str) {
        return printf("%c\n", str);
     });
+    // println(unsigned int, int)
+    When(OverloadedMethod(ArduinoFake(Serial), println, size_t(unsigned int, int))).AlwaysDo([](unsigned int val, int base) {
+       if(base == HEX) {
+         return printf("%X\n", val);
+       } else if(base == OCT) {
+         return printf("%o\n", val);
+       } else {
+         return printf("%u\n", val); // default to DEC
+       }
+    });
+
     When(OverloadedMethod(ArduinoFake(Serial), println, size_t())).AlwaysDo([]() {
        return printf("\n");
     });

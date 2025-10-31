@@ -49,6 +49,8 @@ LoRaWANServiceClass LoRaWANService;
 class MyApp: public App
 {
 public:
+    float lastCourse = -1.0f;
+
     void lerDadosGPS(Posicao &pos) {
         tm t = GPS.getTime();
         /** Obter unix timestamp (seconds since 1970-01-01) válido a partir dos valores do GPS
@@ -67,38 +69,32 @@ public:
     // Chamado periodicamente para registrar uma nova leitura
     void onTimer() override
     {
+        char str_buf[15];
+
         // pinMode(Vext, OUTPUT);
         // digitalWrite(Vext, HIGH);
+        st7735.st7735_fill_screen(ST7735_BLACK);
+        snprintf(str_buf, sizeof(str_buf), "%d:%d GPS...", PositionQueue.getStart(), PositionQueue.size());
+        st7735.st7735_write_str(0, 0, str_buf);
 
-        // ~2 min Fix GPS
-        char str_buf[15];
-        for (int i = 0; i < 15; i++)
-        {
-            bool gps_result = GPS.waitGpsInfo();
-            bool gps_valid = GPS.isValid() && GPS.isUpdated();
+        // Se a última posição foi registrada hà mais de 1 segundo, força um novo fix GPS
+        uint32_t locationAge = GPS.getLocationAge();
+        if(locationAge > 1000) {
+            Serial.print("Última posição antiga, fix GPS... age:"); Serial.println(locationAge);
+            // =========================================================
+            // FIX GPS. execução bloquente, aguarda até conseguir um fix
+            // pode demorar de 1 segundo, ou no pior dos casos ~2 min
+            // =========================================================
+            for (int i = 0; i < 50; i++)
+            {
+                bool gps_result = GPS.waitGpsInfo(3000U, i == 0);
 
-            st7735.st7735_fill_screen(ST7735_BLACK);
-            // A FAZER: parar de usar classe String
-            //char buf[30]; // Buffer para formatar strings
-            //snprintf(buf, 30, "Na fila: %d", numero_posicoes());
-            snprintf(str_buf, sizeof(str_buf), "%d ...%d", PositionQueue.getStart(), PositionQueue.size());
-            st7735.st7735_write_str(0, 0, str_buf);
+                if (gps_result && GPS.isUpdated())
+                    break;
 
-            tm t = GPS.getTime();
-            snprintf(str_buf, sizeof(str_buf), "%02d:%02d:%02d %s", 
-                t.tm_hour, t.tm_min, t.tm_sec, gps_valid ? "FIX" : ".", i);
-            st7735.st7735_write_str(0, 20, str_buf);
-
-            snprintf(str_buf, sizeof(str_buf), "%.7f", GPS.getLatitude());
-            st7735.st7735_write_str(0, 40, str_buf);
-            snprintf(str_buf, sizeof(str_buf), "%.7f", GPS.getLongitude());
-            st7735.st7735_write_str(0, 60, str_buf);
-
-            if (gps_result && gps_valid)
-                break;
-
-            // Wait 1 sec before trying again...
-            delay(500);
+                // Wait 1 sec before trying again...
+                //delay(500);
+            }
         }
 
         Posicao pos;
@@ -108,10 +104,23 @@ public:
         // digitalWrite(Vext, LOW);
 
         PositionQueue.enqueue(pos);
+        lastCourse = GPS.getCourseDeg();
 
 #ifdef WIFI_SSID
         st7735.st7735_write_str(0, 0, WifiService.getIP());
 #endif
+
+        tm t = GPS.getTime();
+        snprintf(str_buf, sizeof(str_buf), "%02d:%02d:%02d %d", 
+            t.tm_hour, t.tm_min, t.tm_sec, PositionQueue.size());
+        st7735.st7735_write_str(0, 20, str_buf);
+
+        snprintf(str_buf, sizeof(str_buf), "%.7f", GPS.getLatitude());
+        st7735.st7735_write_str(0, 40, str_buf);
+        snprintf(str_buf, sizeof(str_buf), "%.7f", GPS.getLongitude());
+        st7735.st7735_write_str(0, 60, str_buf);
+
+        millisLastTime = millis();
     }
     // Chamado quando deve enviar dados
     void onSend() override
@@ -163,7 +172,7 @@ public:
         Serial.println("ACK RECEBIDO! O pacote foi confirmado pelo servidor.");
 
         char str_buf[15];
-        snprintf(str_buf, sizeof(str_buf), "ACK: %d-%d", PositionQueue.getStart(), PositionQueue.getSendIndex()-1);
+        snprintf(str_buf, sizeof(str_buf), "ACK %d-%d......", PositionQueue.getStart(), PositionQueue.getSendIndex()-1);
         st7735.st7735_write_str(0, 0, str_buf);
         //st7735.st7735_write_str(0, 0, (String) "ACK:" + (String)posicoesInicio + " ..." + (String)numero_posicoes()); // Escreve no display
 
@@ -230,6 +239,19 @@ void setup()
 
 void loop()
 {
+    // Só deveria acompanhar o GPS assim em funcionamento Classe C
+    bool gpsValid = GPS.loop();
+    // Identifica que houve uma mudança grande no ângulo desde a última leitura
+    if(gpsValid && MyAppInstance.lastCourse >= 0.0f && GPSClass::absCourseDiff(MyAppInstance.lastCourse, GPS.getCourseDeg()) > ANGULO_MINIMO)
+    {
+        // Mesmo que detectar mudança de ângulo, no máximo irá registrar a cada 2 segundos (vai que dá um bug aí né)
+        if (millis() - MyAppInstance.millisLastTime > 2000)
+        {
+            Serial.println("Detectado mudança de ângulo, lendo nova posição...");
+            MyAppInstance.onTimer();
+        }
+    }
+
     LoRaWANService.loop();
 #ifdef WIFI_SSID
     WifiService.loop();

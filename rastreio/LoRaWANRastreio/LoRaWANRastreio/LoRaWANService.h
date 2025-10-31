@@ -65,45 +65,10 @@ uint8_t appPort = 2;
 uint8_t confirmedNbTrials = 4;
 
 /**
- * appData size is LORAWAN_APP_DATA_MAX_SIZE which is defined in "commissioning.h".
- * appDataSize max value is LORAWAN_APP_DATA_MAX_SIZE.
- * if enabled AT, don't modify LORAWAN_APP_DATA_MAX_SIZE, it may cause system hanging or failure.
- * if disabled AT, LORAWAN_APP_DATA_MAX_SIZE can be modified, the max value is reference to lorawan region and SF.
- * for example, if use REGION_CN470,
- * the max value for different DR can be found in MaxPayloadOfDatarateCN470 refer to DataratesCN470 and BandwidthsCN470 in "RegionCN470.h".
- */
-static void writeHelloWorld()
-{
-    // H  E  L  L  O  \0
-    // 48 45 4C 4C 4F 00
-    appData[appDataSize++] = 0x48;
-    appData[appDataSize++] = 0x45;
-    appData[appDataSize++] = 0x4C;
-    appData[appDataSize++] = 0x4C;
-    appData[appDataSize++] = 0x4F;
-    appData[appDataSize++] = 0x00;
-}
-
-/**
  * Handle any downlink acknowledgment
  * Called when a downlink is received
  */
 RTC_DATA_ATTR uint32_t mensagens_sem_ack = 0;
-
-unsigned long millis_last_time = 0;
-
-class App
-{
-public:
-    // Chamado periodicamente para registrar uma nova leitura
-    virtual void onTimer() = 0;
-    // Chamado quando deve enviar dados
-    virtual void onSend() = 0;
-    // Chamado para confirmar que enviou a última mensagem
-    virtual void onSendAck() = 0;
-    // Retorna quantas mensagens estão pendentes para envio
-    virtual size_t getPendingMessages() = 0;
-};
 
 class LoRaWANServiceClass
 {
@@ -122,6 +87,10 @@ public:
 
     void loop()
     {
+        if(app == nullptr) {
+            return;
+        }
+
         switch (deviceState)
         {
         case DEVICE_STATE_INIT:
@@ -145,20 +114,13 @@ public:
         {
             // Serial.println("DEVICE_STATE_SEND");
             appDataSize = 0;
-            if (app != nullptr)
-            {
-                if(app->getPendingMessages() <= 0 || millis_last_time == 0 || (millis() - millis_last_time > (appTxDutyCycle + 15000))) {
-                    app->onTimer();
-                    millis_last_time = millis();
-                }
-
-                app->onSend();
-            }
-            else
-            {
-                writeHelloWorld();
+            
+            if(app->getPendingMessages() <= 0 || app->millisLastTime == 0 || (millis() - app->millisLastTime > (appTxDutyCycle + 15000))) {
+                app->onTimer();
             }
 
+            app->onSend();
+            
             if (appDataSize > 0)
             {
                 mensagens_sem_ack++;
@@ -174,7 +136,7 @@ public:
 
             uint32_t dutyCycleTime = appTxDutyCycle;
             // Se recebeu ACK recentemente e há mais posições na fila, envia mais rápido
-            if (mensagens_sem_ack <= 1 && app != nullptr && app->getPendingMessages() > 1)
+            if (mensagens_sem_ack <= 1 && app->getPendingMessages() > 1)
             {
                 dutyCycleTime = 10000; // Envia próximo pacote em 10 segundos se houver mais posições na fila
                 //descarregando_fila = true;
@@ -188,17 +150,14 @@ public:
         }
         case DEVICE_STATE_SLEEP:
         {
-            if (app != nullptr)
+            // Será que isso aqui funciona direito mesmo? SÓ FUNCIONA EM CLASS_C
+            if (app->millisLastTime == 0) app->millisLastTime = millis();
+            else if (millis() - app->millisLastTime > (appTxDutyCycle + 15000))
             {
-                // Será que isso aqui funciona direito mesmo? SÓ FUNCIONA EM CLASS_C
-                if (millis_last_time == 0) millis_last_time = millis();
-                else if (millis() - millis_last_time > (appTxDutyCycle + 15000))
-                {
-                    // Serial.println("Tempo sem leituras GPS excedido, lendo nova posição...");
-                    app->onTimer();
-                    millis_last_time = millis();
-                }
+                // Serial.println("Tempo sem leituras GPS excedido, lendo nova posição...");
+                app->onTimer();
             }
+                        
             // Classe A irá colocar em deep sleep.
             // Classe C deixa ligado para receber downlinks.
             LoRaWAN.sleep(loraWanClass);
@@ -214,6 +173,14 @@ public:
         }
     }
 
+    /**
+     * appData size is LORAWAN_APP_DATA_MAX_SIZE which is defined in "commissioning.h".
+     * appDataSize max value is LORAWAN_APP_DATA_MAX_SIZE.
+     * if enabled AT, don't modify LORAWAN_APP_DATA_MAX_SIZE, it may cause system hanging or failure.
+     * if disabled AT, LORAWAN_APP_DATA_MAX_SIZE can be modified, the max value is reference to lorawan region and SF.
+     * for example, if use REGION_CN470,
+     * the max value for different DR can be found in MaxPayloadOfDatarateCN470 refer to DataratesCN470 and BandwidthsCN470 in "RegionCN470.h".
+     */
     void writeAppData(unsigned char *puc, int size)
     {
         if (appDataSize + size > LORAWAN_APP_DATA_MAX_SIZE)
