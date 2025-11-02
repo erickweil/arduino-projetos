@@ -21,9 +21,6 @@
 // GPS principal usado pelo firmware
 #include "GpsModule.h"
 
-// Fila de posições armazenadas
-#include "PositionQueue.h"
-
 // Servidor web para visualização
 #ifdef WIFI_SSID
 #include "WifiService.h"
@@ -33,14 +30,22 @@
 #include "WebServer.h"
 WebServer server(80);
 bool serverStarted = false;
-void webServerSetup();
+bool webServerSetup();
 void webServerLoop();
 #endif
 
 HT_st7735 st7735;
 GPSClass GPS;
 WifiServiceClass WifiService;
-PositionQueueClass PositionQueue;
+#ifdef POSICOES_IMPL_LITTLE_FS
+#include <LittleFS.h>
+#include "PositionQueueLittleFS.h"
+PositionQueueLittleFS PositionQueue;
+#endif
+#ifdef POSICOES_IMPL_RTC
+#include "PositionQueue.h"
+PositionQueueRTC PositionQueue;
+#endif
 LoRaWANServiceClass LoRaWANService;
 
 // ============================================================================
@@ -50,6 +55,24 @@ class MyApp: public App
 {
 public:
     float lastCourse = -1.0f;
+
+    void printarDisplayGPS() {
+        char str_buf[15];
+
+        #ifdef WIFI_SSID
+                st7735.st7735_write_str(0, 0, WifiService.getIP());
+        #endif
+
+        tm t = GPS.getTime();
+        snprintf(str_buf, sizeof(str_buf), "%02d:%02d:%02d %d.....", 
+            t.tm_hour, t.tm_min, t.tm_sec, PositionQueue.size());
+        st7735.st7735_write_str(0, 20, str_buf);
+
+        snprintf(str_buf, sizeof(str_buf), "%.7f", GPS.getLatitude());
+        st7735.st7735_write_str(0, 40, str_buf);
+        snprintf(str_buf, sizeof(str_buf), "%.7f", GPS.getLongitude());
+        st7735.st7735_write_str(0, 60, str_buf);
+    }
 
     void lerDadosGPS(Posicao &pos) {
         tm t = GPS.getTime();
@@ -106,19 +129,7 @@ public:
         PositionQueue.enqueue(pos);
         lastCourse = GPS.getCourseDeg();
 
-#ifdef WIFI_SSID
-        st7735.st7735_write_str(0, 0, WifiService.getIP());
-#endif
-
-        tm t = GPS.getTime();
-        snprintf(str_buf, sizeof(str_buf), "%02d:%02d:%02d %d", 
-            t.tm_hour, t.tm_min, t.tm_sec, PositionQueue.size());
-        st7735.st7735_write_str(0, 20, str_buf);
-
-        snprintf(str_buf, sizeof(str_buf), "%.7f", GPS.getLatitude());
-        st7735.st7735_write_str(0, 40, str_buf);
-        snprintf(str_buf, sizeof(str_buf), "%.7f", GPS.getLongitude());
-        st7735.st7735_write_str(0, 60, str_buf);
+        printarDisplayGPS();
 
         millisLastTime = millis();
     }
@@ -197,44 +208,94 @@ public:
 
 MyApp MyAppInstance;
 
+void setupError(const char *msg)
+{
+    Serial.println(msg);
+    st7735.st7735_fill_screen(ST7735_BLACK); delay(100);
+    st7735.st7735_write_str(0, 0,  "Setup Error   ");
+    st7735.st7735_write_str(0, 20, msg);
+    st7735.st7735_write_str(0, 40, "              ");
+    st7735.st7735_write_str(0, 60, "Rebooting 30s ");
+
+    delay(30000);
+    ESP.restart();
+}
+
 void setup()
 {
     Serial.begin(115200);
-    Serial.print("Inicializando ");
+    Serial.println("Inicializando...");
 
     // https://github.com/esp8266/Arduino/blob/master/cores/esp8266/TZ.h
     // Configuração Timezone. Deve ser UTC pois o GPS fornece tempo em UTC
     configTzTime("UTC0", nullptr);
 
     // Enable Output 3.3V, power supply for built-in TFT and GNS
-    Serial.print("1... ");
     pinMode(Vext, OUTPUT);
     digitalWrite(Vext, HIGH);
 
     // Start serial for GNS
-    Serial.print("2... ");
+    Serial.println("GPS... ");
     GPS.setup();
 
     // Limpa tela e exibe boas vindas
-    Serial.print("3... ");
+    Serial.println("Display... ");
     delay(100);
     st7735.st7735_init();
-    st7735.st7735_fill_screen(ST7735_BLACK);
-    delay(100);
-    st7735.st7735_write_str(0, 0,  "|Rastreio    |");
-    st7735.st7735_write_str(0, 20, "|     LoRaWAN|");
+    st7735.st7735_fill_screen(ST7735_BLACK); delay(100);
+    st7735.st7735_write_str(0, 0,  "|Rastreio ...|");
     st7735.st7735_write_str(0, 40, "|------------|");
     st7735.st7735_write_str(0, 60, "|Erick L Weil|");
 
-    Serial.print("4... ");
-    LoRaWANService.setup(&MyAppInstance);
+    Serial.println("LoRaWAN... ");
+    st7735.st7735_write_str(0, 20, "|     LoRaWAN|");
+    if(!LoRaWANService.setup(&MyAppInstance)) {
+        setupError("Setup LoRaWAN");
+    }
 #ifdef WIFI_SSID
-    WifiService.setup();
+    Serial.println("WiFi... ");
+    st7735.st7735_write_str(0, 20, "|        WiFi|");    
+    if(!WifiService.setup()) {
+        setupError("Setup WiFi");
+    }
 #endif
 #if WEB_ADMIN
-    webServerSetup();
+    Serial.println("WebServer... ");
+    st7735.st7735_write_str(0, 20, "|   WebServer|");
+    if(!webServerSetup()) {
+        setupError("Setup WebServer");
+    }
+#endif
+
+#ifdef POSICOES_IMPL_LITTLE_FS
+    //  You only need to format LittleFS the first time you run a
+    //  test or else use the LITTLEFS plugin to create a partition 
+    //  https://github.com/lorol/arduino-esp32littlefs-plugin
+    Serial.println("LittleFS... ");
+    st7735.st7735_write_str(0, 20, "|    LittleFS|");
+    if(!LittleFS.begin(FORMAT_LITTLEFS_IF_FAILED)) {
+        setupError("Mount LittleFS");
+    }
+
+    Serial.println("PositionQueue... ");
+    st7735.st7735_write_str(0, 20, "|       Queue|");
+    if(!PositionQueue.begin()) {
+        setupError("Begin Queue");
+    }
 #endif
     Serial.println("OK!");
+
+    // Serial.println("Fix GPS inicial... ");
+    // st7735.st7735_write_str(0, 20, "|Fix GPS...  |");
+    // // =========================================================
+    // // FIX GPS inicial. execução bloqueante
+    // // =========================================================
+    // for (int i = 0; i < 200; i++)
+    // {
+    //     bool gps_result = GPS.waitGpsInfo(3000U, i == 0);
+    //     if (gps_result) break;
+    // }
+    // MyAppInstance.printarDisplayGPS();
 }
 
 void loop()
@@ -280,6 +341,15 @@ void handlePositions()
     Posicao pos;
     char str_buf[512];
     int len_bytes = 0;
+
+    // Obter query pagina
+    int32_t page = 1;
+    if(server.hasArg("page"))
+    {
+        page = server.arg("page").toInt();
+        if(page <= 0) page = 1;
+    }
+
     // Para enviar chunked.
     server.setContentLength(CONTENT_LENGTH_UNKNOWN);
     server.send(200, "application/json", "{\n");
@@ -301,16 +371,18 @@ void handlePositions()
     server.sendContent(str_buf, len_bytes);
 
     server.sendContent(",\n\"historico\":[\n");
-    size_t count = PositionQueue.getStart();
-    size_t pos_counter = 0;
-    size_t size = PositionQueue.capacity();
-    while(pos_counter < size && PositionQueue.getAt(pos_counter++, pos)) {
+    size_t posIndex = (PositionQueue.getStart() + (size_t)(page - 1) * 100U) % PositionQueue.capacity();
+    int32_t repeats = (int32_t)min(PositionQueue.size(), 100U);
+    while(repeats > 0 && PositionQueue.getAt(posIndex, pos)) {
         len_bytes = 0;
-        if(pos_counter > 1) {
+        if(posIndex != PositionQueue.getStart()) {
             len_bytes += snprintf(str_buf, sizeof(str_buf), ",\n");
         }
-        len_bytes += PositionQueueClass::toJson(pos, count++, str_buf + len_bytes, sizeof(str_buf) - len_bytes);
+        len_bytes += PositionQueueClass::toJson(pos, posIndex, str_buf + len_bytes, sizeof(str_buf) - len_bytes);
         server.sendContent(str_buf, len_bytes);
+
+        posIndex = (posIndex + 1) % PositionQueue.capacity();
+        repeats--;
     }
     server.sendContent("]}\n");
 }
@@ -320,13 +392,18 @@ void handleNotFound()
     server.send(404, "text/plain", "Not found");
 }
 
-void webServerSetup()
+bool webServerSetup()
 {
     // Inicializa o servidor web não bloqueante
     server.on("/", handleRoot);
     server.on("/info", handlePositions);
     server.onNotFound(handleNotFound);
-    MDNS.addService("http", "tcp", 80);
+    if(!MDNS.addService("http", "tcp", 80)) {
+        Serial.println("Erro ao registrar serviço mDNS");
+        return false;
+    }
+
+    return true;
 }
 
 void webServerLoop()

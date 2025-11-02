@@ -8,6 +8,8 @@
 #include "ArduinoFake.h"
 #include <unity.h>
 #include "MySerial.h"
+#include "Preferences.h"
+#include "LittleFS.h"
 
 #define RTC_DATA_ATTR
 #define ACTIVE_REGION LORAMAC_REGION_AU915
@@ -27,25 +29,45 @@ extern void implArduinoMocks()
     When(OverloadedMethod(ArduinoFake(Serial), print, size_t(char))).AlwaysDo([](const char str) {
        return printf("%c", str);
     });
-    When(OverloadedMethod(ArduinoFake(Serial), println, size_t(const char *))).AlwaysDo([](const char *str) {
-       return printf("%s\n", str);
+    When(OverloadedMethod(ArduinoFake(Serial), print, size_t(unsigned char, int))).AlwaysDo([](const unsigned char val, int base) {
+       return printf(base == HEX ? "%X" : base == OCT ? "%o" : "%d", val);
     });
-    When(OverloadedMethod(ArduinoFake(Serial), println, size_t(char))).AlwaysDo([](const char str) {
-       return printf("%c\n", str);
+    When(OverloadedMethod(ArduinoFake(Serial), print, size_t(int, int))).AlwaysDo([](unsigned int val, int base) {
+       return printf(base == HEX ? "%X" : base == OCT ? "%o" : "%d", val);
     });
-    // println(unsigned int, int)
-    When(OverloadedMethod(ArduinoFake(Serial), println, size_t(unsigned int, int))).AlwaysDo([](unsigned int val, int base) {
-       if(base == HEX) {
-         return printf("%X\n", val);
-       } else if(base == OCT) {
-         return printf("%o\n", val);
-       } else {
-         return printf("%u\n", val); // default to DEC
-       }
+    When(OverloadedMethod(ArduinoFake(Serial), print, size_t(unsigned int, int))).AlwaysDo([](unsigned int val, int base) {
+       return printf(base == HEX ? "%X" : base == OCT ? "%o" : "%u", val);
+    });
+    When(OverloadedMethod(ArduinoFake(Serial), print, size_t(long, int))).AlwaysDo([](unsigned int val, int base) {
+       return printf(base == HEX ? "%X" : base == OCT ? "%o" : "%d", val);
+    });
+    When(OverloadedMethod(ArduinoFake(Serial), print, size_t(unsigned long, int))).AlwaysDo([](unsigned int val, int base) {
+       return printf(base == HEX ? "%X" : base == OCT ? "%o" : "%u", val);
     });
 
     When(OverloadedMethod(ArduinoFake(Serial), println, size_t())).AlwaysDo([]() {
        return printf("\n");
+    });
+    When(OverloadedMethod(ArduinoFake(Serial), println, size_t(const char *))).AlwaysDo([](const char *str) {
+       return Serial.print(str) + Serial.println();
+    });
+    When(OverloadedMethod(ArduinoFake(Serial), println, size_t(char))).AlwaysDo([](const char str) {
+       return Serial.print(str) + Serial.println();
+    });
+    When(OverloadedMethod(ArduinoFake(Serial), println, size_t(unsigned char, int))).AlwaysDo([](const unsigned char val, int base) {
+       return Serial.print(val, base) + Serial.println();
+    });
+    When(OverloadedMethod(ArduinoFake(Serial), println, size_t(int, int))).AlwaysDo([](unsigned int val, int base) {
+      return Serial.print(val, base) + Serial.println();
+    });
+    When(OverloadedMethod(ArduinoFake(Serial), println, size_t(unsigned int, int))).AlwaysDo([](unsigned int val, int base) {
+      return Serial.print(val, base) + Serial.println();
+    });
+    When(OverloadedMethod(ArduinoFake(Serial), println, size_t(long, int))).AlwaysDo([](unsigned int val, int base) {
+       return Serial.print(val, base) + Serial.println();
+    });
+    When(OverloadedMethod(ArduinoFake(Serial), println, size_t(unsigned long, int))).AlwaysDo([](unsigned int val, int base) {
+       return Serial.print(val, base) + Serial.println();
     });
 }
 

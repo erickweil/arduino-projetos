@@ -12,14 +12,28 @@ class WifiServiceClass
 {
 public:
     WifiServiceClass() {}
-    void setup()
+    bool setup()
     {
-        WiFi.mode(WIFI_STA);
+        if(!WiFi.mode(WIFI_STA)) {
+            Serial.println("Erro ao configurar WiFi em modo STA");
+            return false;
+        }
 #if defined(WIFI_HOSTNAME) && defined(ARDUINO_ARCH_ESP32)
-        WiFi.setHostname(WIFI_HOSTNAME);
-        MDNS.begin(WIFI_HOSTNAME);
+        if(!WiFi.setHostname(WIFI_HOSTNAME)) {
+            Serial.println("Erro ao configurar hostname WiFi");
+            return false;
+        }
+        if(!MDNS.begin(WIFI_HOSTNAME)) {
+            Serial.println("Erro ao iniciar mDNS");
+            return false;
+        }
 #endif
-        WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+        if(WiFi.begin(WIFI_SSID, WIFI_PASSWORD) != WL_CONNECTED) {
+            Serial.println("Erro ao iniciar conexão WiFi");
+            // mas tudo bem, vamos tentar de novo no loop...
+        }
+
+        return true;
     }
 
     void loop()

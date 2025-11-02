@@ -10,28 +10,10 @@
 #include <Arduino.h>
 #include <time.h>
 #include "config.h"
+#include "Position.h"
 
 // Rastreio, fila de posições armazenadas
 // Controle da fila de posições armazenadas em RTC memory (Mantém os dados após deep sleep)
-
-// Dados de uma posição GPS (16 bytes)
-struct Posicao
-{
-    // 0
-    uint32_t timestamp; // Unix timestamp, seconds since 1970-01-01 UTC
-
-    // 4
-    int32_t lat;
-
-    // 8
-    int32_t lng;
-
-    // 12
-    uint8_t speed;  // 0-255 km/h
-    uint8_t course; // 0-360° -> 0-255°
-    uint8_t hdop;   // 0.1-100+ -> 0-255  Horizontal Dilution of Precision https://en.wikipedia.org/wiki/Dilution_of_precision
-    uint8_t sats;   // Number of satellites used in fix
-};
 
 // Buffer circular de posições armazenadas na fila
 RTC_DATA_ATTR static Posicao posicoes[POSICOES_FILA_SIZE];
@@ -43,10 +25,10 @@ RTC_DATA_ATTR static size_t posicoesEnvio = 0;
 // Índice da última posição armazenada na fila. Soma +1 após armazenar cada posição
 RTC_DATA_ATTR static size_t posicoesFim = 0;
 
-class PositionQueueClass
+class PositionQueueRTC: public PositionQueueClass
 {
 public:
-    PositionQueueClass()
+    PositionQueueRTC()
     {
         // Nothing to do; dados persistem em RTC
 #ifdef UNIT_TEST
@@ -75,33 +57,33 @@ public:
     /**
      * @return Número de posições atualmente armazenadas na fila.
      */
-    size_t size() const
+    size_t size() const override
     {
         return (POSICOES_FILA_SIZE - posicoesInicio + posicoesFim) % POSICOES_FILA_SIZE;
     }
 
-    size_t capacity() const
+    size_t capacity() const override
     {
         return POSICOES_FILA_SIZE - 1U;
     }
 
-    bool isEmpty() const
+    bool isEmpty() const override
     {
         return posicoesFim == posicoesInicio;
     }
 
     // Acessores para índices (úteis para integrar com código que escreve índice no payload)
-    size_t getStart() const
+    size_t getStart() const override
     {
         return posicoesInicio;
     }
 
-    size_t getSendIndex() const
+    size_t getSendIndex() const override
     {
         return posicoesEnvio;
     }
 
-    size_t getEnd() const
+    size_t getEnd() const override
     {
         return posicoesFim;
     }
@@ -110,7 +92,7 @@ public:
      * Chamar antes de dequeueForSend para iniciar o processo de envio.
      * Irá fixar o índice de envio na posição atual de início da fila.
      */
-    void resetSend()
+    void resetSend() override
     {
         posicoesEnvio = posicoesInicio;
     }
@@ -119,7 +101,7 @@ public:
     /**
      * Irá marcar que todas as posições até SendIndex foram enviadas/consumidas.
      */
-    bool commitSend()
+    bool commitSend() override
     {
         // Nada para confirmar
         if(posicoesEnvio == posicoesInicio)
@@ -134,7 +116,7 @@ public:
      * Enfileira uma posição. Se a fila estiver cheia, sobrescreve a mais antiga.
      * @param p Referência à posição que será enfileirada.
      */
-    void enqueue(const Posicao &p)
+    bool enqueue(const Posicao &p) override
     {
         posicoes[posicoesFim] = p;
         posicoesFim = incrementIndex(posicoesFim);
@@ -144,9 +126,11 @@ public:
         {
             posicoesInicio = incrementIndex(posicoesInicio);
         }
+
+        return true;
     }
 
-    bool getAt(size_t index, Posicao &out) const
+    bool getAt(size_t index, Posicao &out) const override
     {
         // Índice inválido
         if (index >= capacity())
@@ -161,7 +145,7 @@ public:
      * @param out Referência para onde a posição desenfileirada será copiada (só se retornar true).
      * @return true se havia uma posição para desenfileirar, false se a fila estava vazia.
      */
-    [[nodiscard]] bool dequeueForSend(Posicao &out)
+    [[nodiscard]] bool dequeueForSend(Posicao &out) override
     {
         // Fila vazia
         if (posicoesEnvio == posicoesFim)
@@ -170,25 +154,6 @@ public:
         out = posicoes[posicoesEnvio];
         posicoesEnvio = incrementIndex(posicoesEnvio);
         return true;
-    }
-
-    static int toJson(const Posicao &pos, uint32_t count, char * const str_buf, size_t str_buf_size)
-    {
-        time_t ts = pos.timestamp;
-        tm* t = gmtime(&ts);
-
-        return snprintf(str_buf, str_buf_size, 
-            "{\"n\":%d,\"data\":\"%04d-%02d-%02dT%02d:%02d:%02dZ\",\"coords\":[%.7f,%.7f],\"vel\":%u,\"dir\":%.2f,\"hdop\":%.2f,\"satellites\":%u}",
-            count,
-            // Iso DateTime format: YYYY-MM-DDThh:mm:ssZ
-            t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec,
-            (double)pos.lat/ 10000000.0, 
-            (double)pos.lng/ 10000000.0, 
-            pos.speed, 
-            ((double)pos.course * 360.0) / 255.0, 
-            (double)pos.hdop / 10.0, 
-            pos.sats
-        );
     }
 private:
     static inline size_t incrementIndex(size_t idx)

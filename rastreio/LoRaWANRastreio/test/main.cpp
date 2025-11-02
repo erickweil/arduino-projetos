@@ -1,6 +1,8 @@
 #include <UnitTest.h>
 
+#include "Position.h"
 #include "PositionQueue.h"
+#include "PositionQueueLittleFS.h"
 
 #include "GpsModule.h"
 
@@ -10,6 +12,9 @@
 void setUp(void) {
     ArduinoFakeReset();
     implArduinoMocks();
+    if(!LittleFS.begin(true)){
+        Serial.println("LittleFS Mount Failed");
+    }
 }
 
 void tearDown(void) {

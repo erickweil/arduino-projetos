@@ -77,12 +77,16 @@ public:
 
     LoRaWANServiceClass() { }
 
-    void setup(App *app_instance)
+    bool setup(App *app_instance)
     {
+        if(app_instance == nullptr) {
+            return false;
+        }
         app = app_instance;
 #ifndef UNIT_TEST
         Mcu.begin(HELTEC_BOARD, SLOW_CLK_TPYE);
 #endif
+        return true;
     }
 
     void loop()
