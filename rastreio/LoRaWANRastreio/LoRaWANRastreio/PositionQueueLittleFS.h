@@ -9,6 +9,19 @@
 #include "config.h"
 #include "Position.h"
 
+// Estrutura para localização de posição
+struct FileLocation
+{
+    size_t fileSlot;
+    size_t localIndex;
+};
+
+struct Record
+{
+    Posicao pos;
+    uint32_t sendIndex;
+};
+
 // Índice do início global da fila. É um índice com a primeira posição armazenada
 RTC_DATA_ATTR static size_t filaInicio = 0;
 // Índice do fim global da fila. É o índice onde a próxima posição será escrita
@@ -16,8 +29,6 @@ RTC_DATA_ATTR static size_t filaFim = 0;
 
 // Índice de posições confirmadas como enviadas.
 RTC_DATA_ATTR static size_t filaEnvioConfirmado = 0;
-// Índice de leitura para envio.
-RTC_DATA_ATTR static size_t filaEnvio = 0;
 
 /**
  * https://github.com/espressif/arduino-esp32/blob/master/libraries/LittleFS/examples/LITTLEFS_test/LITTLEFS_test.ino
@@ -26,7 +37,7 @@ RTC_DATA_ATTR static size_t filaEnvio = 0;
 class PositionQueueLittleFS : public PositionQueueClass
 {
 public:
-    PositionQueueLittleFS() : initialized(false)
+    PositionQueueLittleFS() : initialized(false), _readFile(File(nullptr)), _readIndex(SIZE_MAX), _readLastLoc({SIZE_MAX, SIZE_MAX})
     {
         static_assert(LITTLE_FS_QUEUE_MAX_FILE_SIZE % RECORD_SIZE == 0, "MAX_FILE_SIZE deve ser múltiplo de RECORD_SIZE");
         static_assert(LITTLE_FS_QUEUE_MAX_FILE_SIZE % CONFIG_SPI_FLASH_WRITE_CHUNK_SIZE == 0, "MAX_FILE_SIZE deve ser múltiplo do tamanho do bloco de escrita do SPI Flash");
@@ -37,7 +48,6 @@ public:
         filaInicio = 0;
         filaFim = 0;
         filaEnvioConfirmado = 0;
-        filaEnvio = 0;
 #endif
     }
 
@@ -134,20 +144,20 @@ public:
         filaFim = end_slot.fileSlot * POSITIONS_PER_FILE + end_slot.localIndex;
         filaInicio = next_slot * POSITIONS_PER_FILE + 0;
         filaEnvioConfirmado = filaInicio;
-        filaEnvio = filaInicio;
         // Índice de envio está escrito na última posição armazenada na fila
         if(filaFim != filaInicio)
         {
             Record lastRecord;
-            if(readRecordAt((filaFim + POSITIONS_SIZE - 1) % POSITIONS_SIZE, lastRecord))
+            beginReadAt((filaFim + POSITIONS_SIZE - 1) % POSITIONS_SIZE);
+            if(readNextRecord(lastRecord))
             {
-                filaEnvio = lastRecord.sendIndex;
                 filaEnvioConfirmado = lastRecord.sendIndex;
             }
             else
             {
                 Serial.println("[PosQueue] Erro ao ler índice de envio da última posição.");
             }
+            endRead();
         }
 
         initialized = true;
@@ -159,29 +169,33 @@ public:
      */
     size_t size() const override
     {
-        // return (POSICOES_FILA_SIZE - posicoesInicio + posicoesFim) % POSICOES_FILA_SIZE;
+        return (POSITIONS_SIZE - filaInicio + filaFim) % POSITIONS_SIZE;
+    }
+
+    size_t pendingSend() const override
+    {
         return (POSITIONS_SIZE - filaEnvioConfirmado + filaFim) % POSITIONS_SIZE;
     }
 
     size_t capacity() const override
     {
-        return POSICOES_FILA_SIZE - 1U;
+        return POSITIONS_SIZE - 1U;
     }
 
     bool isEmpty() const override
     {
-        return filaFim == filaEnvioConfirmado;
+        return filaFim == filaInicio;
     }
 
     // Acessores para índices (úteis para integrar com código que escreve índice no payload)
     size_t getStart() const override
     {
-        return filaEnvioConfirmado;
+        return filaInicio;
     }
 
     size_t getSendIndex() const override
     {
-        return filaEnvio;
+        return filaEnvioConfirmado;
     }
 
     size_t getEnd() const override
@@ -190,26 +204,11 @@ public:
     }
 
     /**
-     * Chamar antes de dequeueForSend para iniciar o processo de envio.
-     * Irá fixar o índice de envio na posição atual de início da fila.
-     */
-    void resetSend() override
-    {
-        filaEnvio = filaEnvioConfirmado;
-    }
-
-    /**
      * Irá marcar que todas as posições até SendIndex foram enviadas/consumidas.
      */
-    bool commitSend() override
+    void commitSend(size_t index) override
     {
-        // Nada para confirmar
-        if(filaEnvio == filaEnvioConfirmado)
-        {
-            return false;
-        }
-        filaEnvioConfirmado = filaEnvio;
-        return true;
+        filaEnvioConfirmado = index;
     }
 
     /**
@@ -228,59 +227,130 @@ public:
         return true;
     }
 
-    bool getAt(size_t index, Posicao &out) const override
+    /**
+     * Inicia a leitura sequencial de posições a partir do índice especificado.
+     * @param index Índice da primeira posição a ser lida.
+     * @return true se a leitura foi iniciada com sucesso, false caso contrário.
+     */
+    bool beginReadAt(size_t index) override
+    {
+        if(_readIndex != SIZE_MAX)
+        {
+            Serial.println("[PosQueue] Erro: leitura já iniciada.");
+            return false;
+        }
+
+        _readIndex = index;
+        _readLastLoc = {SIZE_MAX, SIZE_MAX};
+        return true;
+    }
+    /**
+     * Lê a próxima posição na sequência iniciada por beginReadAt.
+     * @param out Referência para onde a posição lida será copiada (só se retornar true).
+     * @return true se uma posição foi lida com sucesso, false se não há mais posições ou ocorreu um erro.
+     */
+    bool readNext(Posicao &out) override
     {
         Record record;
-        if (!readRecordAt(index, record))
+        if(!readNextRecord(record))
         {
             return false;
         }
+
         out = record.pos;
+        return true;
+    }
+
+    bool readNextRecord(Record &record) 
+    {
+        if(_readIndex == SIZE_MAX)
+        {
+            Serial.println("[PosQueue] Erro: leitura não iniciada.");
+            return false;
+        }
+        
+        FileLocation loc;
+        mapPositionToFile(_readIndex, loc);
+
+        // Começar a ler próximo arquivo
+        if(!_readFile || _readLastLoc.fileSlot != loc.fileSlot)
+        {
+            // Fechar arquivo anterior
+            if(_readFile)
+            {
+                _readFile.close();
+            }
+
+            // Abrir novo arquivo
+            char path[32];
+            getFilePath(loc.fileSlot, path, sizeof(path));
+
+            //_readFile = LittleFS.open(path, FILE_READ);
+            // https://www.reddit.com/r/cpp_questions/comments/y65z84/is_using_placement_new_to_reconstruct_an_object/
+            _readFile.~File();
+            new (&_readFile) File(LittleFS.open(path, FILE_READ));
+
+            if(!_readFile)
+            {
+                endRead();
+                return false;
+            }
+
+            // Se é o primeiro acesso, posicionar no índice local
+            size_t offset = loc.localIndex * RECORD_SIZE;
+            if(_readFile.size() < offset + RECORD_SIZE)
+            {
+                endRead();
+                return false;
+            }
+
+            if (!_readFile.seek(offset))
+            {
+                endRead();
+                return false;
+            }            
+        }
+
+        // Já estamos no arquivo aberto correto e na posição correta
+
+        size_t readBytes = _readFile.read((uint8_t*)&record, RECORD_SIZE);
+        if(readBytes != RECORD_SIZE)
+        {
+            endRead();
+            return false;
+        }
+
+        _readIndex = incrementIndex(_readIndex);
+        _readLastLoc = loc;
         return true;
     }
 
     /**
-     * Desenfileira a próxima posição para envio (Alterando apenas o índice de envio).
-     * @param out Referência para onde a posição desenfileirada será copiada (só se retornar true).
-     * @return true se havia uma posição para desenfileirar, false se a fila estava vazia.
+     * Finaliza a leitura sequencial iniciada por beginReadAt.
+     * (Não tem problema chamar duas vezes)
      */
-    [[nodiscard]] bool dequeueForSend(Posicao &out) override
+    size_t endRead() override
     {
-        if (filaEnvio == filaFim)
+        size_t finalIndex = _readIndex;
+        if(_readFile)
         {
-            return false;
+            _readFile.close();
         }
-
-        Record record;
-        if (!readRecordAt(filaEnvio, record))
-        {
-            return false;
-        }
-        out = record.pos;
-        filaEnvio = incrementIndex(filaEnvio);
-        return true;
+        _readIndex = SIZE_MAX;
+        _readLastLoc = {SIZE_MAX, SIZE_MAX};
+        return finalIndex;
     }
 
 private:
-    // Estrutura para localização de posição
-    struct FileLocation
-    {
-        size_t fileSlot;
-        size_t localIndex;
-    };
-
-    struct Record
-    {
-        Posicao pos;
-        uint32_t sendIndex;
-    };
-
-    bool initialized;
-
     // Tamanho de cada registro (Posicao + 4 bytes sendIndex)
     static constexpr size_t RECORD_SIZE = sizeof(Record);
     static constexpr size_t POSITIONS_PER_FILE = LITTLE_FS_QUEUE_MAX_FILE_SIZE / RECORD_SIZE;
     static constexpr size_t POSITIONS_SIZE = LITTLE_FS_QUEUE_FILES * POSITIONS_PER_FILE;
+
+    bool initialized;
+    File _readFile;
+    size_t _readIndex;
+    FileLocation _readLastLoc;
 
     static inline size_t incrementIndex(size_t idx)
     {
@@ -298,7 +368,7 @@ private:
         snprintf(buf, bufSize, "/positions.%lu.bin", slot);
     }
 
-    bool readRecordAt(size_t positionIndex, Record &record) const
+    /*bool readRecordAt(size_t positionIndex, Record &record) const
     {
         FileLocation loc;
         mapPositionToFile(positionIndex, loc);
@@ -324,7 +394,7 @@ private:
         size_t readBytes = f.read((uint8_t*)&record, RECORD_SIZE);
         f.close();
         return readBytes == RECORD_SIZE;
-    }
+    }*/
 
     bool writeRecordAt(size_t positionIndex, const Record &record)
     {
@@ -364,9 +434,6 @@ private:
 
             mapPositionToFile(filaEnvioConfirmado, loc);
             if(loc.fileSlot == nextSlot) { filaEnvioConfirmado = novoInicio; }
-
-            mapPositionToFile(filaEnvio, loc);
-            if(loc.fileSlot == nextSlot) { filaEnvio = novoInicio; }
         }
 
         f.close();

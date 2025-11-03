@@ -33,53 +33,34 @@ void test_enqueue_and_size()
     });
 }
 
-void test_dequeue_for_send_and_commit()
-{
-    run_callbacks_on_both_impls([](PositionQueueClass &PositionQueue) {
-        Posicao p1 = {10, 100000000, 200000000, 5, 10, 20, 6};
-        Posicao p2 = {11, 110000000, 210000000, 6, 11, 21, 7};
-        
-        TEST_ASSERT_TRUE(PositionQueue.enqueue(p1));
-        TEST_ASSERT_TRUE(PositionQueue.enqueue(p2));
-        TEST_ASSERT_EQUAL_UINT32(2, PositionQueue.size());
-
-        PositionQueue.resetSend();
-        Posicao out;
-        TEST_ASSERT_TRUE(PositionQueue.dequeueForSend(out));
-        TEST_ASSERT_EQUAL_UINT32(p1.timestamp, out.timestamp);
-
-        // still size should be 2 until commitSend
-        TEST_ASSERT_EQUAL_UINT32(2, PositionQueue.size());
-
-        // simulate acknowledging the first
-        TEST_ASSERT_TRUE(PositionQueue.commitSend());
-        TEST_ASSERT_EQUAL_UINT32(1, PositionQueue.size());
-    });
-}
-
 void test_commit_send_behavior()
 {
     run_callbacks_on_both_impls([](PositionQueueClass &PositionQueue) {
-        // empty queue: commitSend should be false
-        TEST_ASSERT_FALSE(PositionQueue.commitSend());
+        // 1. Enqueue 10 positions
+        // 2. Read 10 positions for send
+        // 3. Commit.
+        // 4. Size should be 0
 
-        // enqueue one position
-        Posicao p = {42, 1, 2, 0,0,0,0};
-        PositionQueue.enqueue(p);
-        TEST_ASSERT_EQUAL_UINT32(1, PositionQueue.size());
-
-        // resetSend sets send index to start; commitSend still false
-        PositionQueue.resetSend();
-        TEST_ASSERT_FALSE(PositionQueue.commitSend());
-
-        // dequeue one for send -> advances send index
+        const size_t num_positions = 10;
+        for (size_t i = 0; i < num_positions; ++i)
+        {
+            Posicao p = { (uint32_t)(i + 1), (int32_t)(i + 1), (int32_t)(i + 1), 0,0,0,0 };
+            TEST_ASSERT_TRUE(PositionQueue.enqueue(p));
+            TEST_ASSERT_EQUAL_UINT32(i + 1, PositionQueue.size());
+        }
+        TEST_ASSERT_TRUE(PositionQueue.beginReadAt(PositionQueue.getSendIndex()));
         Posicao out;
-        TEST_ASSERT_TRUE(PositionQueue.dequeueForSend(out));
-        TEST_ASSERT_EQUAL_UINT32(p.timestamp, out.timestamp);
+        for (size_t i = 0; i < num_positions; ++i)
+        {
+            TEST_ASSERT_TRUE(PositionQueue.readNext(out));
+            TEST_ASSERT_EQUAL_UINT32((uint32_t)(i + 1), out.timestamp);
+        }
+        size_t last = PositionQueue.endRead();
+        TEST_ASSERT_EQUAL_UINT32(num_positions, last - PositionQueue.getSendIndex());
+        PositionQueue.commitSend(last);
+        TEST_ASSERT_EQUAL_UINT32(0, PositionQueue.pendingSend());
+        TEST_ASSERT_EQUAL_UINT32(num_positions, PositionQueue.size());
 
-        // now commitSend should confirm and reduce size
-        TEST_ASSERT_TRUE(PositionQueue.commitSend());
-        TEST_ASSERT_EQUAL_UINT32(0, PositionQueue.size());
     });
 }
 
@@ -95,16 +76,17 @@ void test_overwrite_content()
         }
 
         // After overwriting, the queue should contain at least half the values, but still counting up to (cap+3)
-        PositionQueue.resetSend();
+        TEST_ASSERT_TRUE(PositionQueue.beginReadAt(PositionQueue.getSendIndex()));
         Posicao out;
-        TEST_ASSERT_TRUE(PositionQueue.dequeueForSend(out));
+        TEST_ASSERT_TRUE(PositionQueue.readNext(out));
+        size_t count = 1;
         uint32_t start = out.timestamp;
-        uint32_t idx = 1;
-        while (PositionQueue.dequeueForSend(out)) {
-            TEST_ASSERT_EQUAL_UINT32(start + idx, out.timestamp);
-            ++idx;
+        while (PositionQueue.readNext(out)) {
+            TEST_ASSERT_EQUAL_UINT32(start + count, out.timestamp);
+            ++count;
         }
-        TEST_ASSERT_EQUAL_UINT32(cap+10, out.timestamp);
+        TEST_ASSERT_EQUAL_UINT32(cap + 10, out.timestamp);
+        PositionQueue.endRead();
     });
 }
 
@@ -120,19 +102,20 @@ void test_queue_get_at()
         }
 
         // Test getAt for all valid indices
+        TEST_ASSERT_TRUE(PositionQueue.beginReadAt(0));
         for (size_t i = 0; i < cap; ++i)
         {
             Posicao out;
-            bool ok = PositionQueue.getAt(i, out);
-            TEST_ASSERT_TRUE(ok);
+            TEST_ASSERT_TRUE(PositionQueue.readNext(out));
             uint32_t expected = (uint32_t)(i + 1);
             TEST_ASSERT_EQUAL_UINT32(expected, out.timestamp);
         }
 
         // Test getAt for invalid index
         Posicao out;
-        bool ok = PositionQueue.getAt(cap, out);
-        TEST_ASSERT_FALSE(ok);
+        TEST_ASSERT_FALSE(PositionQueue.readNext(out));
+
+        PositionQueue.endRead();
     });
 }
 
@@ -157,19 +140,19 @@ void test_write_read_loop()
                 global_index++;
             }
 
-            // Read back positions
-            PositionQueue.resetSend();
+            TEST_ASSERT_TRUE(PositionQueue.beginReadAt(PositionQueue.getSendIndex()));
             Posicao out;
             for (size_t i = 0; i < positions_per_iteration; ++i)
             {
-                TEST_ASSERT_TRUE(PositionQueue.dequeueForSend(out));
+                TEST_ASSERT_TRUE(PositionQueue.readNext(out));
                 uint32_t expected_index = (uint32_t)(iter * positions_per_iteration + i + 1);
                 TEST_ASSERT_EQUAL_UINT32(expected_index, out.timestamp);
             }
 
             // Commit send
-            TEST_ASSERT_TRUE(PositionQueue.commitSend());
-            TEST_ASSERT_EQUAL_UINT32(0, PositionQueue.size());
+            size_t last = PositionQueue.endRead();
+            PositionQueue.commitSend(last);
+            TEST_ASSERT_EQUAL_UINT32(0, PositionQueue.pendingSend());
         }
     });
 
@@ -178,7 +161,9 @@ void test_write_read_loop()
     qLFS.begin();
 
     // Por enquanto, vai ser assim mesmo, o último commit não é salvo
-    TEST_ASSERT_EQUAL_UINT32(10, qLFS.size());
+    TEST_ASSERT_EQUAL_UINT32(10, qLFS.pendingSend());
+    Serial.print("Size after reload:"); Serial.println(qLFS.size());
+    TEST_ASSERT_TRUE(qLFS.size() >= (LITTLE_FS_QUEUE_FILES - 1) * (LITTLE_FS_QUEUE_MAX_FILE_SIZE / sizeof(Record)));
 }
 
 void test_to_json()
@@ -194,7 +179,6 @@ void test_to_json()
 void test_position_queue()
 {
     RUN_TEST(test_enqueue_and_size);
-    RUN_TEST(test_dequeue_for_send_and_commit);
     RUN_TEST(test_commit_send_behavior);
     RUN_TEST(test_overwrite_content);
     RUN_TEST(test_queue_get_at);

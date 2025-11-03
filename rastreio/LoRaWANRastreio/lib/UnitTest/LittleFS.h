@@ -32,7 +32,7 @@ enum SeekMode : uint8_t
 class File
 {
 public:
-    File() : fp(nullptr) {}
+    File(FILE *p = nullptr) : fp(p), _path("") {}
     ~File()
     {
         close();

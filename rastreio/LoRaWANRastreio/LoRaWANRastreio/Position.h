@@ -31,6 +31,8 @@ public:
      */
     virtual size_t size() const = 0;
 
+    virtual size_t pendingSend() const = 0;
+
     virtual size_t capacity() const = 0;
 
     virtual bool isEmpty() const = 0;
@@ -43,16 +45,9 @@ public:
     virtual size_t getEnd() const = 0;
     
     /**
-     * Chamar antes de dequeueForSend para iniciar o processo de envio.
-     * Irá fixar o índice de envio na posição atual de início da fila.
-     */
-    virtual void resetSend() = 0;
-
-
-    /**
      * Irá marcar que todas as posições até SendIndex foram enviadas/consumidas.
      */
-    virtual bool commitSend() = 0;
+    virtual void commitSend(size_t index) = 0;
 
     /**
      * Enfileira uma posição. Se a fila estiver cheia, sobrescreve a mais antiga.
@@ -60,14 +55,22 @@ public:
      */
     virtual bool enqueue(const Posicao &p) = 0;
 
-    virtual bool getAt(size_t index, Posicao &out) const = 0;
-
     /**
-     * Desenfileira a próxima posição para envio (Alterando apenas o índice de envio).
-     * @param out Referência para onde a posição desenfileirada será copiada (só se retornar true).
-     * @return true se havia uma posição para desenfileirar, false se a fila estava vazia.
+     * Inicia a leitura sequencial de posições a partir do índice especificado.
+     * @param index Índice da primeira posição a ser lida.
+     * @return true se a leitura foi iniciada com sucesso, false caso contrário.
      */
-    [[nodiscard]] virtual bool dequeueForSend(Posicao &out) = 0;
+    virtual bool beginReadAt(size_t index) = 0;
+    /**
+     * Lê a próxima posição na sequência iniciada por beginReadAt.
+     * @param out Referência para onde a posição lida será copiada (só se retornar true).
+     * @return true se uma posição foi lida com sucesso, false se não há mais posições ou ocorreu um erro.
+     */
+    virtual bool readNext(Posicao &out) = 0;
+    /**
+     * Finaliza a leitura sequencial iniciada por beginReadAt (retorna o índice final lido).
+     */
+    virtual size_t endRead() = 0;
 
     static int toJson(const Posicao &pos, uint32_t count, char * const str_buf, size_t str_buf_size)
     {
