@@ -48,6 +48,8 @@ PositionQueueRTC PositionQueue;
 #endif
 LoRaWANServiceClass LoRaWANService;
 
+void setupError(const char *msg);
+
 // ============================================================================
 //                                Lógica Principal
 // ============================================================================
@@ -56,24 +58,6 @@ class MyApp: public App
 public:
     size_t lastSentIndex = SIZE_MAX;
     float lastCourse = -1.0f;
-
-    void printarDisplayGPS() {
-        char str_buf[15];
-
-        #ifdef WIFI_SSID
-                st7735.st7735_write_str(0, 0, WifiService.getIP());
-        #endif
-
-        tm t = GPS.getTime();
-        snprintf(str_buf, sizeof(str_buf), "%02d:%02d:%02d %d.....", 
-            t.tm_hour, t.tm_min, t.tm_sec, PositionQueue.pendingSend());
-        st7735.st7735_write_str(0, 20, str_buf);
-
-        snprintf(str_buf, sizeof(str_buf), "%.7f", GPS.getLatitude());
-        st7735.st7735_write_str(0, 40, str_buf);
-        snprintf(str_buf, sizeof(str_buf), "%.7f", GPS.getLongitude());
-        st7735.st7735_write_str(0, 60, str_buf);
-    }
 
     void lerDadosGPS(Posicao &pos) {
         tm t = GPS.getTime();
@@ -98,18 +82,18 @@ public:
         // pinMode(Vext, OUTPUT);
         // digitalWrite(Vext, HIGH);
         st7735.st7735_fill_screen(ST7735_BLACK);
-        snprintf(str_buf, sizeof(str_buf), "%d:%d GPS...", PositionQueue.getSendIndex(), PositionQueue.pendingSend());
+        snprintf(str_buf, sizeof(str_buf), "%zu:%zu GPS...", PositionQueue.getSendIndex(), PositionQueue.pendingSend());
         st7735.st7735_write_str(0, 0, str_buf);
 
-        // Se a última posição foi registrada hà mais de 1 segundo, força um novo fix GPS
+        // Se a última posição foi registrada hà mais de 1.5 segundo, força um novo fix GPS
         uint32_t locationAge = GPS.getLocationAge();
-        if(locationAge > 1000) {
+        if(locationAge > 1500) {
             Serial.print("Última posição antiga, fix GPS... age:"); Serial.println(locationAge);
             // =========================================================
-            // FIX GPS. execução bloquente, aguarda até conseguir um fix
-            // pode demorar de 1 segundo, ou no pior dos casos ~2 min
+            // FIX GPS. execução bloqueante, aguarda até conseguir um fix
+            // pode demorar 1 segundo, ou no pior dos casos ~30s
             // =========================================================
-            for (int i = 0; i < 50; i++)
+            for (int i = 0; i < 10; i++)
             {
                 bool gps_result = GPS.waitGpsInfo(3000U, i == 0);
 
@@ -127,10 +111,27 @@ public:
         // A FAZER: em modo CLASS_A, desligar Vext após um tempo sem uso, para economizar bateria
         // digitalWrite(Vext, LOW);
 
-        PositionQueue.enqueue(pos);
+        if(!PositionQueue.enqueue(pos))
+        {
+            Serial.println("Erro ao enfileirar posição!");
+            setupError("Enqueue Error");
+        }
         lastCourse = GPS.getCourseDeg();
 
-        printarDisplayGPS();
+#ifdef WIFI_SSID
+        WifiService.getIP(str_buf, sizeof(str_buf));
+        st7735.st7735_write_str(0, 0, str_buf);
+#endif
+
+        tm t = GPS.getTime();
+        snprintf(str_buf, sizeof(str_buf), "%02d:%02d:%02d %zu.....", 
+            t.tm_hour, t.tm_min, t.tm_sec, PositionQueue.pendingSend());
+        st7735.st7735_write_str(0, 20, str_buf);
+
+        snprintf(str_buf, sizeof(str_buf), "%.7f", GPS.getLatitude());
+        st7735.st7735_write_str(0, 40, str_buf);
+        snprintf(str_buf, sizeof(str_buf), "%.7f", GPS.getLongitude());
+        st7735.st7735_write_str(0, 60, str_buf);
 
         millisLastTime = millis();
     }
@@ -158,6 +159,7 @@ public:
         //PositionQueue.resetSend();
         if(!PositionQueue.beginReadAt(PositionQueue.getSendIndex())) {
             Serial.println("Erro ao iniciar leitura das posições para envio.");
+            PositionQueue.endRead();
             return;
         }
         uint32_t inicio = (uint32_t)PositionQueue.getSendIndex();
@@ -166,7 +168,6 @@ public:
         Posicao pos;
         for (uint32_t i = 0; i < posicoes_para_enviar; i++)
         {
-            //Posicao *pos = desenfileirar_posicao_envio();
             if (!PositionQueue.readNext(pos))
             {
                 Serial.println("Erro ao obter posição da fila para envio.");
@@ -186,29 +187,29 @@ public:
     // Chamado para confirmar que enviou a última mensagem
     void onSendAck() override
     {
-        Serial.println("ACK RECEBIDO! O pacote foi confirmado pelo servidor.");
-
         char str_buf[15];
-        snprintf(str_buf, sizeof(str_buf), "ACK %d-%d......", PositionQueue.getSendIndex(), lastSentIndex-1);
+        if(lastSentIndex == SIZE_MAX)
+        {
+            Serial.println("Aviso: commitSend chamado sem janela ativa.");
+
+            snprintf(str_buf, sizeof(str_buf), "ACK %zu-???...", PositionQueue.getSendIndex());
+            st7735.st7735_write_str(0, 0, str_buf);
+            return;
+        }
+        
+        Serial.println("ACK RECEBIDO! O pacote foi confirmado pelo servidor.");
+        snprintf(str_buf, sizeof(str_buf), "ACK %zu-%zu...", PositionQueue.getSendIndex(), lastSentIndex);
         st7735.st7735_write_str(0, 0, str_buf);
-        //st7735.st7735_write_str(0, 0, (String) "ACK:" + (String)posicoesInicio + " ..." + (String)numero_posicoes()); // Escreve no display
 
         // Remove a posição da fila
         Serial.print("Marcando posições de Nº ");
         Serial.print(PositionQueue.getSendIndex());
         Serial.print(" a ");
-        Serial.print(lastSentIndex-1);
+        Serial.print(lastSentIndex);
         Serial.println(" como enviadas.");
-        //posicoesInicio = posicoesEnvio;
-        if(lastSentIndex == SIZE_MAX)
-        {
-            Serial.println("Aviso: commitSend chamado sem janela ativa.");
-        }
-        else 
-        {
-            PositionQueue.commitSend(lastSentIndex);
-            lastSentIndex = SIZE_MAX;
-        }
+    
+        PositionQueue.commitSend(lastSentIndex);
+        lastSentIndex = SIZE_MAX;
     }
     // Retorna quantas mensagens estão pendentes para envio
     size_t getPendingMessages() override
@@ -223,7 +224,7 @@ void setupError(const char *msg)
 {
     Serial.println(msg);
     st7735.st7735_fill_screen(ST7735_BLACK); delay(100);
-    st7735.st7735_write_str(0, 0,  "Setup Error   ");
+    st7735.st7735_write_str(0, 0,  "Critical Error");
     st7735.st7735_write_str(0, 20, msg);
     st7735.st7735_write_str(0, 40, "              ");
     st7735.st7735_write_str(0, 60, "Rebooting 30s ");
@@ -387,22 +388,38 @@ void handlePositions()
     len_bytes += PositionQueueClass::toJson(pos, 0, str_buf + len_bytes, sizeof(str_buf) - len_bytes);
     server.sendContent(str_buf, len_bytes);
 
+    len_bytes = 0;
+    len_bytes += snprintf(str_buf, sizeof(str_buf), ",\n\"System\":");
+    len_bytes += snprintf(str_buf + len_bytes, sizeof(str_buf) - len_bytes,
+        "{\"uptimeMs\":%lu,\"freeHeap\":%u,\"totalHeap\":%u,\"usedLittleFS\":%zu,\"totalLittleFS\":%zu}",
+        millis(),
+        ESP.getFreeHeap(),
+        ESP.getHeapSize(),
+        LittleFS.usedBytes(),
+        LittleFS.totalBytes()
+    );
+    server.sendContent(str_buf, len_bytes);
+
     server.sendContent(",\n\"historico\":[\n");
-    //size_t queueMaxSize = PositionQueue.capacity() + 1;
-    //size_t posIndex = (PositionQueue.getStart() + (page - 1) * limit) % queueMaxSize;
     size_t repeats = min(PositionQueue.size(), limit);
     size_t posicao = (PositionQueue.getStart() + (page - 1) * limit) % (PositionQueue.capacity() + 1);
-    PositionQueue.beginReadAt(posicao);
-    while(repeats > 0 && PositionQueue.readNext(pos)) {
-        len_bytes = 0;
-        len_bytes += PositionQueueClass::toJson(pos, posicao, str_buf, sizeof(str_buf));
-        if(repeats > 1) {
-            len_bytes += snprintf(str_buf + len_bytes, sizeof(str_buf) - len_bytes, ",\n");
+    if(!PositionQueue.beginReadAt(posicao)) {
+        server.sendContent("{\"erro\":\"Não foi possível iniciar leitura\"}\n]}\n");
+        return;
+    }
+    for(uint32_t i = 0; i < repeats; i++) {
+        if(!PositionQueue.readNext(pos)) {
+            break;
         }
+
+        len_bytes = 0;
+        if(i > 0) {
+            len_bytes += snprintf(str_buf, sizeof(str_buf), ",\n");
+        }
+        len_bytes += PositionQueueClass::toJson(pos, posicao, str_buf + len_bytes, sizeof(str_buf) - len_bytes);
         server.sendContent(str_buf, len_bytes);
 
         posicao = (posicao + 1) % (PositionQueue.capacity() + 1);
-        repeats--;
     }
     PositionQueue.endRead();
     server.sendContent("\n]}\n");

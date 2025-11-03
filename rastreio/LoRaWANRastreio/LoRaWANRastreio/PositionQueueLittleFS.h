@@ -5,6 +5,8 @@
 #include <time.h>
 #include <FS.h>
 #include <LittleFS.h>
+// Para uso do placement new
+#include <new>
 
 #include "config.h"
 #include "Position.h"
@@ -365,7 +367,7 @@ private:
 
     void getFilePath(size_t slot, char *buf, size_t bufSize) const
     {
-        snprintf(buf, bufSize, "/positions.%lu.bin", slot);
+        snprintf(buf, bufSize, "/positions.%zu.bin", slot);
     }
 
     /*bool readRecordAt(size_t positionIndex, Record &record) const

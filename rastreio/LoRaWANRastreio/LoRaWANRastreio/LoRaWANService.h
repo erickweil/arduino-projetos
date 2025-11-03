@@ -220,8 +220,8 @@ public:
     int infoJson(char * const str_buf, size_t str_buf_size)
     {
         int len_bytes = 0;
-        len_bytes += snprintf(str_buf, str_buf_size, "{\"queued\":%lu,\"withoutAck\":%u",
-            app != nullptr ? app->getPendingMessages() : 0,
+        len_bytes += snprintf(str_buf, str_buf_size, "{\"queued\":%zu,\"withoutAck\":%u",
+            app != nullptr ? app->getPendingMessages() : 0U,
             mensagens_sem_ack
         );
         

@@ -54,26 +54,37 @@ public:
         }
     }
 
-    String getIP()
+    void getIP(char* strBuf, size_t strBufSize)
     {
         switch (WiFi.status())
         {
         case WL_CONNECTED:
-            return WiFi.localIP().toString();
+        {
+            IPAddress addr = WiFi.localIP();
+            snprintf(strBuf, strBufSize, "%u.%u.%u.%u", addr[0], addr[1], addr[2], addr[3]);
+            break;
+        }
         case WL_IDLE_STATUS:
-            return "idle";
+            snprintf(strBuf, strBufSize, "idle");
+        break;
         case WL_NO_SSID_AVAIL:
-            return "no ssid";
+            snprintf(strBuf, strBufSize, "no ssid");
+        break;
         case WL_SCAN_COMPLETED:
-            return "scan";
+            snprintf(strBuf, strBufSize, "scan");
+        break;
         case WL_CONNECT_FAILED:
-            return "failed";
+            snprintf(strBuf, strBufSize, "failed");
+        break;
         case WL_CONNECTION_LOST:
-            return "lost";
+            snprintf(strBuf, strBufSize, "lost");
+        break;
         case WL_DISCONNECTED:
-            return "disconnect";
+            snprintf(strBuf, strBufSize, "disconnect");
+        break;
         default:
-            return "unknown";
+            snprintf(strBuf, strBufSize, "unknown");
+        break;
         }
     }
 

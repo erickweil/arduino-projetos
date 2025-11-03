@@ -78,7 +78,7 @@ public:
         tm* t = gmtime(&ts);
 
         return snprintf(str_buf, str_buf_size, 
-            "{\"n\":%d,\"data\":\"%04d-%02d-%02dT%02d:%02d:%02dZ\",\"coords\":[%.7f,%.7f],\"vel\":%u,\"dir\":%.2f,\"hdop\":%.2f,\"satellites\":%u}",
+            "{\"n\":%u,\"data\":\"%04d-%02d-%02dT%02d:%02d:%02dZ\",\"coords\":[%.7f,%.7f],\"vel\":%u,\"dir\":%.2f,\"hdop\":%.2f,\"satellites\":%u}",
             count,
             // Iso DateTime format: YYYY-MM-DDThh:mm:ssZ
             t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec,
