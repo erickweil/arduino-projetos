@@ -2,8 +2,6 @@
 
 using namespace fakeit;
 
-//# include "PositionQueue.h"
-
 void run_callbacks_on_both_impls(void (*callback)(PositionQueueClass &PositionQueue))
 {
     PositionQueueRTC qRTC;
@@ -68,33 +66,7 @@ void test_overwrite_content()
 {
     run_callbacks_on_both_impls([](PositionQueueClass &PositionQueue) {
         const size_t cap = PositionQueue.capacity();
-        // enqueue values 1..(cap+10)
-        for (size_t i = 1; i <= cap + 10; ++i)
-        {
-            Posicao p = { (uint32_t)i, (int32_t)i, (int32_t)i, 0,0,0,0 };
-            PositionQueue.enqueue(p);
-        }
-
-        // After overwriting, the queue should contain at least half the values, but still counting up to (cap+3)
-        TEST_ASSERT_TRUE(PositionQueue.beginReadAt(PositionQueue.getSendIndex()));
-        Posicao out;
-        TEST_ASSERT_TRUE(PositionQueue.readNext(out));
-        size_t count = 1;
-        uint32_t start = out.timestamp;
-        while (PositionQueue.readNext(out)) {
-            TEST_ASSERT_EQUAL_UINT32(start + count, out.timestamp);
-            ++count;
-        }
-        TEST_ASSERT_EQUAL_UINT32(cap + 10, out.timestamp);
-        PositionQueue.endRead();
-    });
-}
-
-void test_queue_get_at()
-{
-    run_callbacks_on_both_impls([](PositionQueueClass &PositionQueue) {
-        const size_t cap = PositionQueue.capacity();
-        // enqueue values 1..cap
+        // enqueue values 1..(cap)
         for (size_t i = 1; i <= cap; ++i)
         {
             Posicao p = { (uint32_t)i, (int32_t)i, (int32_t)i, 0,0,0,0 };
@@ -110,11 +82,29 @@ void test_queue_get_at()
             uint32_t expected = (uint32_t)(i + 1);
             TEST_ASSERT_EQUAL_UINT32(expected, out.timestamp);
         }
-
         // Test getAt for invalid index
         Posicao out;
         TEST_ASSERT_FALSE(PositionQueue.readNext(out));
 
+        PositionQueue.endRead();
+
+        for (size_t i = cap + 1; i <= cap + 10; ++i)
+        {
+            Posicao p = { (uint32_t)i, (int32_t)i, (int32_t)i, 0,0,0,0 };
+            PositionQueue.enqueue(p);
+        }
+
+        // After overwriting, the queue should contain at least half the values, but still counting up to (cap+3)
+        TEST_ASSERT_TRUE(PositionQueue.beginReadAt(PositionQueue.getSendIndex()));
+        
+        TEST_ASSERT_TRUE(PositionQueue.readNext(out));
+        size_t count = 1;
+        uint32_t start = out.timestamp;
+        while (PositionQueue.readNext(out)) {
+            TEST_ASSERT_EQUAL_UINT32(start + count, out.timestamp);
+            ++count;
+        }
+        TEST_ASSERT_EQUAL_UINT32(cap + 10, out.timestamp);
         PositionQueue.endRead();
     });
 }
@@ -127,8 +117,10 @@ void test_write_read_loop()
         // 3. commit send
         // 4. repeat above steps 10000x
 
-        const size_t iterations = 10000;
+        const size_t cap = PositionQueue.capacity();
+
         const size_t positions_per_iteration = 10;
+        const size_t iterations = (cap / positions_per_iteration) * 2; // write enough to wrap around
         uint32_t global_index = 1;
         for (size_t iter = 0; iter < iterations; ++iter)
         {
@@ -181,7 +173,6 @@ void test_position_queue()
     RUN_TEST(test_enqueue_and_size);
     RUN_TEST(test_commit_send_behavior);
     RUN_TEST(test_overwrite_content);
-    RUN_TEST(test_queue_get_at);
     RUN_TEST(test_write_read_loop);
     RUN_TEST(test_to_json);
 }

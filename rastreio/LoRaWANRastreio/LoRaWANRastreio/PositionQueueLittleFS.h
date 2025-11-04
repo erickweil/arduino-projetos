@@ -287,10 +287,10 @@ public:
             char path[32];
             getFilePath(loc.fileSlot, path, sizeof(path));
 
-            //_readFile = LittleFS.open(path, FILE_READ);
+            _readFile = LittleFS.open(path, FILE_READ);
             // https://www.reddit.com/r/cpp_questions/comments/y65z84/is_using_placement_new_to_reconstruct_an_object/
-            _readFile.~File();
-            new (&_readFile) File(LittleFS.open(path, FILE_READ));
+            //_readFile.~File();
+            //new (&_readFile) File(LittleFS.open(path, FILE_READ));
 
             if(!_readFile)
             {

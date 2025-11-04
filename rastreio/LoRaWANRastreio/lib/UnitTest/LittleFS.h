@@ -1,287 +1,220 @@
 // Minimal LittleFS mock compatible with g++11
 #pragma once
 
-#include <cstdint>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <string>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <dirent.h>
-#include <unistd.h>
-#include <errno.h>
+#include "FS.h"
 
-#ifndef FILE_READ
-#define FILE_READ 0x01
-#endif
-#ifndef FILE_WRITE
-#define FILE_WRITE 0x02
-#endif
-#ifndef FILE_APPEND
-#define FILE_APPEND 0x04
-#endif
-
-enum SeekMode : uint8_t
-{
-    SeekSet = 0,
-    SeekCur = 1,
-    SeekEnd = 2
-};
-
-class File
-{
-public:
-    File(FILE *p = nullptr) : fp(p), _path("") {}
-    ~File()
-    {
-        close();
-    }
-
-    size_t read(uint8_t *buffer, size_t length)
-    {
-        if (!fp)
-            return 0;
-        size_t n = fread(buffer, 1, length, fp);
-        return n;
-    }
-
-    size_t write(const uint8_t *buffer, size_t length)
-    {
-        if (!fp)
-            return 0;
-        size_t n = fwrite(buffer, 1, length, fp);
-        fflush(fp);
-        return n;
-    }
-
-    bool seek(uint32_t position, SeekMode mode = SeekSet)
-    {
-        if (!fp)
-            return false;
-        int whence = SEEK_SET;
-        if (mode == SeekCur)
-            whence = SEEK_CUR;
-        else if (mode == SeekEnd)
-            whence = SEEK_END;
-        return fseek(fp, static_cast<long>(position), whence) == 0;
-    }
-
-    size_t size() const
-    {
-        if (!fp)
-            return 0;
-        long cur = ftell(const_cast<FILE *>(fp));
-        if (cur < 0)
-            return 0;
-        if (fseek(const_cast<FILE *>(fp), 0, SEEK_END) != 0)
-            return 0;
-        long end = ftell(const_cast<FILE *>(fp));
-        if (end < 0)
-            return 0;
-        // restore
-        fseek(const_cast<FILE *>(fp), cur, SEEK_SET);
-        return static_cast<size_t>(end);
-    }
-
-    void close()
-    {
-        if (fp)
-        {
-            fclose(fp);
-            fp = nullptr;
-        }
-    }
-
-    explicit operator bool() const
-    {
-        return fp != nullptr;
-    }
-
-    const char* path() const
-    {
-        return _path.c_str();
-    }
-
-private:
-    File(FILE *f, const std::string &p) : fp(f), _path(p) {}
-
-    FILE *fp;
-    std::string _path;
-
-    friend class LittleFSMockClass;
-};
-
-// Helper: create directories recursively
-static bool mkdirs(const std::string &path)
-{
-    if (path.empty())
-        return false;
-    size_t pos = 0;
-    std::string current;
-    if (path[0] == '/')
-        pos = 1;
-    while (true)
-    {
-        size_t next = path.find('/', pos);
-        current = path.substr(0, next == std::string::npos ? path.size() : next);
-        if (current.size() > 0)
-        {
-            struct stat st;
-            if (stat(current.c_str(), &st) != 0)
-            {
-                if (mkdir(current.c_str(), 0755) != 0 && errno != EEXIST)
-                    return false;
-            }
-            else if (!S_ISDIR(st.st_mode))
-            {
-                return false;
-            }
-        }
-        if (next == std::string::npos)
-            break;
-        pos = next + 1;
-    }
-    return true;
-
+extern "C" {
+    #include "lfs.h"
+    #include "bd/lfs_filebd.h"
 }
 
-class LittleFSMockClass
-{
+namespace littlefs {
+
+constexpr lfs_size_t READ_SIZE = 16;
+constexpr lfs_size_t PROG_SIZE = 16;
+constexpr lfs_size_t BLOCK_SIZE = 4096;
+constexpr lfs_size_t BLOCK_COUNT = 128; // 0.5 MB total
+constexpr int32_t    BLOCK_CYCLES = 1024;
+constexpr lfs_size_t CACHE_SIZE = 64;
+constexpr lfs_size_t LOOKAHEAD_SIZE = 32;
+
+constexpr lfs_size_t ERASE_SIZE = 4096;
+constexpr lfs_size_t ERASE_COUNT = 1024;
+
+lfs_filebd_t bd;
+
+// https://github.com/littlefs-project/littlefs/blob/master/runners/test_runner.c
+// https://github.com/joltwallet/esp_littlefs
+struct lfs_config cfg = {
+    .context = &bd,
+    .read = lfs_filebd_read,
+    .prog = lfs_filebd_prog,
+    .erase = lfs_filebd_erase,
+    .sync = lfs_filebd_sync,
+    .read_size = READ_SIZE,
+    .prog_size = PROG_SIZE,
+    .block_size = BLOCK_SIZE,
+    .block_count = BLOCK_COUNT,
+    .block_cycles = BLOCK_CYCLES,
+    .cache_size = CACHE_SIZE,
+    .lookahead_size = LOOKAHEAD_SIZE
+};
+
+struct lfs_filebd_config bdcfg = {
+    .read_size          = READ_SIZE,
+    .prog_size          = PROG_SIZE,
+    .erase_size         = ERASE_SIZE,
+    .erase_count        = ERASE_COUNT
+};
+
+const char *path = "./littlefs_mock.img";
+
+lfs_t lfs;
+
+} // namespace littlefs
+
+class File {
 public:
-    LittleFSMockClass() : mounted(false)
-    {
-        // Default root path is a hidden directory inside the project working dir.
-        // Using a relative path reduces risk of touching arbitrary system files.
-        rootPath = std::string("./test/.littlefs_mock");
+    File(std::shared_ptr<lfs_file_t> p = std::shared_ptr<lfs_file_t>()) : lfs_file(p) {}
+
+    size_t read(uint8_t *buffer, size_t length) {
+        if (!lfs_file) return 0;
+
+        lfs_ssize_t n = lfs_file_read(&littlefs::lfs, lfs_file.get(), buffer, length);
+        if (n < 0) return 0;
+        return static_cast<size_t>(n);
     }
 
-    bool begin(bool /*formatOnFail*/ = false)
-    {
-        if (mounted)
-            return true;
-        // create root path if needed
-        struct stat st;
-        if (stat(rootPath.c_str(), &st) != 0)
-        {
-            if (!mkdirs(rootPath))
-                return false;
+    size_t write(const uint8_t *buffer, size_t length) {
+        if (!lfs_file) return 0;
+        
+        lfs_ssize_t n = lfs_file_write(&littlefs::lfs, lfs_file.get(), buffer, length);
+        if (n < 0) return 0;
+        return static_cast<size_t>(n);
+    }
+
+    bool seek(uint32_t position, SeekMode mode = SeekSet) {
+        if (!lfs_file) return false;
+
+        int whence = LFS_SEEK_SET;
+        if (mode == SeekCur)
+            whence = LFS_SEEK_CUR;
+        else if (mode == SeekEnd)
+            whence = LFS_SEEK_END;
+        lfs_off_t res = lfs_file_seek(&littlefs::lfs, lfs_file.get(), position, whence);
+        return res >= 0;
+    }
+
+    size_t size() const {
+        if (!lfs_file) return 0;
+
+        lfs_off_t sz = lfs_file_size(&littlefs::lfs, lfs_file.get());
+        if (sz < 0) return 0;
+        return static_cast<size_t>(sz);
+    }
+
+    void close() {
+        if (!lfs_file) return;
+
+        lfs_file_close(&littlefs::lfs, lfs_file.get());
+        lfs_file = nullptr;
+    }
+
+    explicit operator bool() const {
+        return lfs_file != nullptr;
+    }
+private:
+    std::shared_ptr<lfs_file_t> lfs_file;
+};
+
+class LittleFSMockClass {
+public:
+    bool begin(bool) {
+        if (mounted) return true;
+
+        int err = lfs_filebd_create(&littlefs::cfg, littlefs::path, &littlefs::bdcfg);
+        if (err < 0) {
+            printf("lfs_filebd_create failed: %d\n", err);
+            return false;
         }
+
+        err = lfs_format(&littlefs::lfs, &littlefs::cfg);
+        if (err < 0) {
+            printf("lfs_format failed: %d\n", err);
+            return false;
+        }
+
+        err = lfs_mount(&littlefs::lfs, &littlefs::cfg);
+        if (err < 0) {
+            printf("lfs_mount failed: %d\n", err);
+            return false;
+        }
+
         mounted = true;
         return true;
     }
 
-    void end()
-    {
+    void end() {
+        if (!mounted) return;
+
+        int err = lfs_unmount(&littlefs::lfs);
+        if (err < 0) {
+            printf("lfs_unmount failed: %d\n", err);
+            return;
+        }
+
+        err = lfs_filebd_destroy(&littlefs::cfg);
+        if (err < 0) {
+            printf("lfs_filebd_destroy failed: %d\n", err);
+            return;
+        }
+
         mounted = false;
     }
 
-    File open(const char *path, uint8_t mode)
-    {
+    File open(const char *path, const char *mode = FILE_READ) {
         if (!mounted || !path)
             return File();
 
-        std::string rel(path);
-        // strip leading '/'
-        while (!rel.empty() && rel[0] == '/')
-            rel.erase(0, 1);
-        std::string full = rootPath + "/" + rel;
-
-        // ensure parent
-        size_t p = full.find_last_of('/');
-        if (p != std::string::npos)
-        {
-            std::string parent = full.substr(0, p);
-            mkdirs(parent);
+        int flags = 0;
+        if (strcmp(mode, FILE_READ) == 0) {
+            flags = LFS_O_RDONLY;
+        } else if (strcmp(mode, FILE_WRITE) == 0) {
+            flags = LFS_O_WRONLY | LFS_O_CREAT | LFS_O_TRUNC;
+        } else if (strcmp(mode, FILE_APPEND) == 0) {
+            flags = LFS_O_WRONLY | LFS_O_CREAT | LFS_O_APPEND;
+        } else {
+            // Unsupported mode
+            return File();
         }
 
-        const char *modestr = "rb";
-        if (mode & FILE_APPEND)
-            modestr = "ab+"; // append and allow read
-        else if (mode & FILE_WRITE)
-            modestr = "wb+"; // truncate and allow read
-
-        FILE *f = fopen(full.c_str(), modestr);
-        if (!f)
-        {
-            // if opened for read but file missing, return empty
-            if ((mode & FILE_READ) && !(mode & (FILE_WRITE | FILE_APPEND)))
-                return File();
-            // try to create
-            f = fopen(full.c_str(), "wb+");
-            if (!f)
-                return File();
-            if (mode & FILE_APPEND)
-                fseek(f, 0, SEEK_END);
+        auto file = std::make_shared<lfs_file_t>();
+        int err = lfs_file_open(&littlefs::lfs, file.get(), path, flags);
+        if (err < 0) {
+            return File();
         }
 
-        if (mode & FILE_APPEND)
-            fseek(f, 0, SEEK_END);
-
-        return File(f, full);
+        return File(file);
     }
 
-    bool exists(const char *path) const
-    {
+    bool exists(const char *path) {
+        if (!mounted)
+            return false;
+
+        File file = open(path, FILE_READ);
+        if (!file) {
+            return false;
+        }
+        file.close();
+        return true;
+    }
+
+    bool remove(const char *path) {
         if (!mounted || !path)
             return false;
-        std::string rel(path);
-        while (!rel.empty() && rel[0] == '/')
-            rel.erase(0, 1);
-        std::string full = rootPath + "/" + rel;
-        struct stat st;
-        return stat(full.c_str(), &st) == 0;
+
+        int err = lfs_remove(&littlefs::lfs, path);
+        return err >= 0;
     }
 
-    bool remove(const char *path)
-    {
-        if (!mounted || !path)
-            return false;
-        std::string rel(path);
-        while (!rel.empty() && rel[0] == '/')
-            rel.erase(0, 1);
-        std::string full = rootPath + "/" + rel;
-        return unlink(full.c_str()) == 0;
-    }
-
-    bool rename(const char *from, const char *to)
-    {
+    bool rename(const char *from, const char *to) {
         if (!mounted || !from || !to)
             return false;
-        std::string relFrom(from);
-        while (!relFrom.empty() && relFrom[0] == '/')
-            relFrom.erase(0, 1);
-        std::string relTo(to);
-        while (!relTo.empty() && relTo[0] == '/')
-            relTo.erase(0, 1);
-        std::string fullFrom = rootPath + "/" + relFrom;
-        std::string fullTo = rootPath + "/" + relTo;
 
-        // ensure parent for destination
-        size_t p = fullTo.find_last_of('/');
-        if (p != std::string::npos)
-        {
-            std::string parent = fullTo.substr(0, p);
-            mkdirs(parent);
-        }
-
-        return ::rename(fullFrom.c_str(), fullTo.c_str()) == 0;
+        int err = lfs_rename(&littlefs::lfs, from, to);
+        return err >= 0;
     }
 
-    size_t totalBytes() const
-    {
-        // For mock, return a large fixed size
-        return 16 * 1024 * 1024; // 16 MB
+    size_t totalBytes() const {
+        return littlefs::cfg.block_size * littlefs::cfg.block_count;
     }
 
-    size_t usedBytes() const
-    {
-        // For mock, return 0
-        return 0;
+    size_t usedBytes() const {
+        size_t used_bytes = std::min(totalBytes(), (size_t)(littlefs::cfg.block_size * lfs_fs_size(&littlefs::lfs)));
+        return used_bytes;
     }
 private:
-    std::string rootPath;
-    bool mounted;
+    bool mounted = false;
 };
 
 LittleFSMockClass LittleFS;
