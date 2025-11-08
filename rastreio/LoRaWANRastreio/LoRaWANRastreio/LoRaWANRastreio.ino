@@ -7,7 +7,7 @@
     - https://br.mouser.com/datasheet/3/1574/1/esp32-s3_datasheet_en.pdf (Datasheet processador ESP32-S3FN8)
 */
 
-#ifdef UNIT_TEST
+#if defined(EPOXY_DUINO)
 #include "UnitTest.h"
 #endif
 
@@ -399,7 +399,11 @@ void handlePositions()
         "{\"uptimeMs\":%lu,\"freeHeap\":%u,\"totalHeap\":%u,\"usedLittleFS\":%zu,\"totalLittleFS\":%zu}",
         millis(),
         ESP.getFreeHeap(),
+#if defined(EPOXY_DUINO)
+        ESP.getFreeHeap(),
+#else
         ESP.getHeapSize(),
+#endif
         LittleFS.usedBytes(),
         LittleFS.totalBytes()
     );

@@ -3,9 +3,7 @@
 #define Pins_Arduino_h
 
 #include <stdint.h>
-#ifndef UNIT_TEST
 #include "soc/soc_caps.h"
-#endif
 
 #define USB_VID 0x303a
 #define USB_PID 0x1001
@@ -13,9 +11,7 @@
 // Some boards have too low voltage on this pin (board design bug)
 // Use different pin with 3V and connect with 48
 // and change this setup for the chosen pin (for example 38)
-#ifndef UNIT_TEST
 static const uint8_t LED_BUILTIN = SOC_GPIO_PIN_COUNT + 48;
-#endif
 #define BUILTIN_LED    LED_BUILTIN  // backward compatibility
 #define LED_BUILTIN    LED_BUILTIN
 #define RGB_BUILTIN    LED_BUILTIN

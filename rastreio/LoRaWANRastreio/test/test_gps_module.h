@@ -1,7 +1,5 @@
 #include <UnitTest.h>
 
-using namespace fakeit;
-
 #include "HT_TinyGPS++.h"
 #include "GpsModule.h"
 

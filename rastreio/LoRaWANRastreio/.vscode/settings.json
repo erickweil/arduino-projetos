@@ -17,6 +17,7 @@
         "span": "cpp",
         "gpio.h": "c",
         "sstream": "cpp",
-        "fstream": "cpp"
+        "fstream": "cpp",
+        "system_error": "cpp"
     }
 }

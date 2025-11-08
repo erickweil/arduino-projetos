@@ -1,7 +1,7 @@
 #ifndef WIFI_SERVICE_H
 #define WIFI_SERVICE_H
 
-#ifndef UNIT_TEST
+#if !defined(EPOXY_DUINO)
 #include <Arduino.h>
 #include <WiFi.h>
 #include <ESPmDNS.h>

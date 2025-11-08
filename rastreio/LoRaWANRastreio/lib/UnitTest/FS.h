@@ -3,7 +3,7 @@
 // Minimal stub for FS.h so PositionQueueLittleFS can include it in native tests.
 // The real File/FS APIs are provided by LittleFS mock (MockLittleFS.h).
 #include <stdlib.h>
-
+#include <memory>
 
 #define FILE_READ   "r"
 #define FILE_WRITE  "w"
