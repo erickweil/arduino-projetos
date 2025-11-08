@@ -6,6 +6,11 @@
     - https://resource.heltec.cn/download/Wireless_Tracker/
     - https://br.mouser.com/datasheet/3/1574/1/esp32-s3_datasheet_en.pdf (Datasheet processador ESP32-S3FN8)
 */
+
+#ifdef UNIT_TEST
+#include "UnitTest.h"
+#endif
+
 #include "Arduino.h"
 
 #include "LoRaWan_APP.h"
@@ -446,7 +451,7 @@ bool webServerSetup()
 
 void webServerLoop()
 {
-    if (WiFi.status() != WL_CONNECTED)
+    if (!WifiService.isConnected())
     {
         if(serverStarted) {
             server.stop();

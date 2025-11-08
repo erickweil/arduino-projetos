@@ -85,7 +85,7 @@ public:
             {
                 c = Serial1.read();
 //# if DEBUG_SERIAL
-                //Serial.print((char)c);
+                Serial.println((char)c);
 //# endif
                 TinyGPS.encode(c);
             }

@@ -150,7 +150,10 @@ public:
   void sleep(DeviceClass_t classMode);
   void setDefaultDR(int8_t dataRate);
   void generateDeveuiByChipID();
+private:
+    unsigned long scheduledCycleTime = 0;
 };
+
 
 extern enum eDeviceState_LoraWan deviceState;
 
@@ -236,12 +239,17 @@ void LoRaWanClass::send()
 
 void LoRaWanClass::cycle(uint32_t dutyCycle)
 {
-
+    scheduledCycleTime = millis() + dutyCycle;
 }
 
 void LoRaWanClass::sleep(DeviceClass_t classMode)
 {
-
+    if(scheduledCycleTime != 0 && millis() > scheduledCycleTime)
+    {
+        scheduledCycleTime = 0;
+        deviceState = DEVICE_STATE_SEND;
+        return;
+    }
 }
 
 void LoRaWanClass::setDefaultDR(int8_t dataRate)

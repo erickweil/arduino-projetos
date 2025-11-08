@@ -109,7 +109,7 @@ private:
 
 class LittleFSMockClass {
 public:
-    bool begin(bool) {
+    bool begin(bool format) {
         if (mounted) return true;
 
         int err = lfs_filebd_create(&littlefs::cfg, littlefs::path, &littlefs::bdcfg);
@@ -118,10 +118,12 @@ public:
             return false;
         }
 
-        err = lfs_format(&littlefs::lfs, &littlefs::cfg);
-        if (err < 0) {
-            printf("lfs_format failed: %d\n", err);
-            return false;
+        if(format) {
+            err = lfs_format(&littlefs::lfs, &littlefs::cfg);
+            if (err < 0) {
+                printf("lfs_format failed: %d\n", err);
+                return false;
+            }
         }
 
         err = lfs_mount(&littlefs::lfs, &littlefs::cfg);
