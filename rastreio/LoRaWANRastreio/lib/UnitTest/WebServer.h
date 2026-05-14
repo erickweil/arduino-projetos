@@ -2,16 +2,10 @@
 #define WEBSERVER_H
 
 #include <Arduino.h>
+#include <IPAddress.h>
 #include <functional>
 #include <memory>
 #include <vector>
-
-struct IPAddress {
-    uint8_t bytes[4];
-    IPAddress(uint8_t b0, uint8_t b1, uint8_t b2, uint8_t b3) {
-        bytes[0] = b0; bytes[1] = b1; bytes[2] = b2; bytes[3] = b3;
-    }
-};
 
 //typedef enum http_method HTTPMethod;
 enum HTTPMethod {

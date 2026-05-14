@@ -31,3 +31,8 @@ Requirements:
 cd ./lib
 git clone https://github.com/bxparks/EpoxyDuino.git
 ```
+
+## CPP-HTTPLib for native tests
+```
+git clone https://github.com/yhirose/cpp-httplib.git
+```

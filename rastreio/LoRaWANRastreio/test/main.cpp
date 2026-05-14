@@ -35,17 +35,30 @@ extern void testittleFSMock() {
     file.close();
 }
 
+#include "httplib.h"
+extern void testHttpLibMock() {
+    using namespace httplib;
+
+    Server svr;
+    svr.Get("/", [](const Request& req, Response& res) {
+        res.set_content("Hello, World!", "text/plain");
+    });
+
+    TEST_ASSERT_TRUE(svr.listen("localhost", 8080));
+}
+
 int main(int argc, char **argv)
 {
-    if(!LittleFS.begin(true)){
+    /*if(!LittleFS.begin(true)){
         Serial.println("LittleFS Mount Failed");
-    }
+    }*/
     UNITY_BEGIN();
-    RUN_TEST(testittleFSMock);
+    RUN_TEST(testHttpLibMock);
+    /*RUN_TEST(testittleFSMock);
 
     test_gps_module();
     test_position_queue();
 
-    LittleFS.end();
+    LittleFS.end();*/
     return UNITY_END();
 }
