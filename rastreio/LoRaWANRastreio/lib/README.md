@@ -20,3 +20,19 @@ rm -rf runners
 rm -rf tests
 rm -rf benches
 ```
+
+## EpoxyDuino for native tests
+Requirements:
+- CMake
+- Git
+- GCC toolchain
+
+```
+cd ./lib
+git clone https://github.com/bxparks/EpoxyDuino.git
+```
+
+## CPP-HTTPLib for native tests
+```
+git clone https://github.com/yhirose/cpp-httplib.git
+```

@@ -6,6 +6,11 @@
     - https://resource.heltec.cn/download/Wireless_Tracker/
     - https://br.mouser.com/datasheet/3/1574/1/esp32-s3_datasheet_en.pdf (Datasheet processador ESP32-S3FN8)
 */
+
+#if defined(EPOXY_DUINO)
+#include "UnitTest.h"
+#endif
+
 #include "Arduino.h"
 
 #include "LoRaWan_APP.h"
@@ -394,7 +399,11 @@ void handlePositions()
         "{\"uptimeMs\":%lu,\"freeHeap\":%u,\"totalHeap\":%u,\"usedLittleFS\":%zu,\"totalLittleFS\":%zu}",
         millis(),
         ESP.getFreeHeap(),
+#if defined(EPOXY_DUINO)
+        ESP.getFreeHeap(),
+#else
         ESP.getHeapSize(),
+#endif
         LittleFS.usedBytes(),
         LittleFS.totalBytes()
     );
@@ -446,7 +455,7 @@ bool webServerSetup()
 
 void webServerLoop()
 {
-    if (WiFi.status() != WL_CONNECTED)
+    if (!WifiService.isConnected())
     {
         if(serverStarted) {
             server.stop();

@@ -1,6 +1,7 @@
 #ifndef WIFI_SERVICE_H
 #define WIFI_SERVICE_H
 
+#if !defined(EPOXY_DUINO)
 #include <Arduino.h>
 #include <WiFi.h>
 #include <ESPmDNS.h>
@@ -88,8 +89,54 @@ public:
         }
     }
 
+    bool isConnected()
+    {
+        return WiFi.status() == WL_CONNECTED;
+    }
 private:
     uint32_t connectMillis = 0;
 };
+
+#else
+
+#include <Arduino.h>
+#include "config.h"
+
+class WifiServiceClass
+{
+public:
+    WifiServiceClass() {}
+    bool setup()
+    {
+        return true;
+    }
+
+    void loop()
+    {
+    }
+
+    void getIP(char* strBuf, size_t strBufSize)
+    {
+        snprintf(strBuf, strBufSize, "0.0.0.0");
+    }
+
+    bool isConnected()
+    {
+        return true;
+    }
+};
+
+class MDNSClass {
+public:
+    bool begin(const char* hostname) {
+        return true;
+    }   
+    bool addService(const char* service, const char* proto, uint16_t port) {
+        return true;
+    }
+};
+MDNSClass MDNS;
+
+#endif
 
 #endif // WIFI_SERVICE_H

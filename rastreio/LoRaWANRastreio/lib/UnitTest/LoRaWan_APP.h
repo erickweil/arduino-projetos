@@ -150,7 +150,10 @@ public:
   void sleep(DeviceClass_t classMode);
   void setDefaultDR(int8_t dataRate);
   void generateDeveuiByChipID();
+private:
+    unsigned long scheduledCycleTime = 0;
 };
+
 
 extern enum eDeviceState_LoraWan deviceState;
 
@@ -236,12 +239,22 @@ void LoRaWanClass::send()
 
 void LoRaWanClass::cycle(uint32_t dutyCycle)
 {
-
+    scheduledCycleTime = millis() + dutyCycle;
 }
 
 void LoRaWanClass::sleep(DeviceClass_t classMode)
 {
-
+    if(scheduledCycleTime != 0 && millis() > scheduledCycleTime)
+    {
+        scheduledCycleTime = 0;
+        Serial1.__clear();
+        Serial1.__feed(",,,,,\r\n,,,,,,,\r\n");
+        Serial1.__delay();
+        Serial1.__feed("$GPRMC,045103.000,A,3014.1984,N,09749.2872,W,0.67,161.46,030913,,,A*7C\r\n");
+        Serial1.__feed("$GPGGA,045104.000,3014.1985,N,09749.2873,W,1,09,1.2,211.6,M,-22.5,M,,0000*62\r\n");
+        deviceState = DEVICE_STATE_SEND;
+        return;
+    }
 }
 
 void LoRaWanClass::setDefaultDR(int8_t dataRate)

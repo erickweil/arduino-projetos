@@ -83,7 +83,7 @@ public:
             return false;
         }
         app = app_instance;
-#ifndef UNIT_TEST
+#if !defined(EPOXY_DUINO)
         Mcu.begin(HELTEC_BOARD, SLOW_CLK_TPYE);
 #endif
         return true;

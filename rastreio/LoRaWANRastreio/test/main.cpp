@@ -1,24 +1,19 @@
-#include <UnitTest.h>
+#include "UnitTest.h"
 
 #include "Position.h"
 #include "PositionQueue.h"
 #include "PositionQueueLittleFS.h"
-
 #include "GpsModule.h"
 
 #include "test_position_queue.h"
 #include "test_gps_module.h"
 
 void setUp(void) {
-    ArduinoFakeReset();
-    implArduinoMocks();
-    if(!LittleFS.begin(true)){
-        Serial.println("LittleFS Mount Failed");
-    }
+
 }
 
 void tearDown(void) {
-    // clean stuff up here
+
 }
 
 extern void testittleFSMock() {
@@ -40,11 +35,30 @@ extern void testittleFSMock() {
     file.close();
 }
 
+#include "httplib.h"
+extern void testHttpLibMock() {
+    using namespace httplib;
+
+    Server svr;
+    svr.Get("/", [](const Request& req, Response& res) {
+        res.set_content("Hello, World!", "text/plain");
+    });
+
+    TEST_ASSERT_TRUE(svr.listen("localhost", 8080));
+}
+
 int main(int argc, char **argv)
 {
+    /*if(!LittleFS.begin(true)){
+        Serial.println("LittleFS Mount Failed");
+    }*/
     UNITY_BEGIN();
-    RUN_TEST(testittleFSMock);
-    test_position_queue();
+    RUN_TEST(testHttpLibMock);
+    /*RUN_TEST(testittleFSMock);
+
     test_gps_module();
+    test_position_queue();
+
+    LittleFS.end();*/
     return UNITY_END();
 }

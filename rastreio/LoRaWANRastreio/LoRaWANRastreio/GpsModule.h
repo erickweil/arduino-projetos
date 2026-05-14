@@ -15,7 +15,11 @@ class GPSClass
 public:
     void setup()
     {
+#if defined(EPOXY_DUINO)
+        Serial1.begin(115200);
+#else
         Serial1.begin(115200, SERIAL_8N1, 33, 34);
+#endif
     }
 
     bool loop()
@@ -85,7 +89,7 @@ public:
             {
                 c = Serial1.read();
 //# if DEBUG_SERIAL
-                //Serial.print((char)c);
+//              Serial.println((char)c);
 //# endif
                 TinyGPS.encode(c);
             }

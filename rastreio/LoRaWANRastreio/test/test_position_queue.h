@@ -1,7 +1,5 @@
 #include <UnitTest.h>
 
-using namespace fakeit;
-
 void run_callbacks_on_both_impls(void (*callback)(PositionQueueClass &PositionQueue))
 {
     PositionQueueRTC qRTC;
