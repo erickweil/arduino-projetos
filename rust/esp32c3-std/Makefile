@@ -24,9 +24,9 @@ flash: build-rust
 monitor:
 	espflash monitor $(if $(PORT),--port $(PORT),)
 
-## Executa os testes
+## Executa os testes (NO HOST)
 test:
-	cargo test
+	cargo test --lib --no-default-features --target x86_64-unknown-linux-gnu
 
 ## Simula no Wokwi (requer extensão Wokwi no VS Code ou wokwi-cli)
 simulate: build-rust

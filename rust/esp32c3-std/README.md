@@ -10,8 +10,12 @@ Então poderá usar os comandos Make para compilar, fazer flash e monitorar a po
 - make flash
 - make monitor
 
-> Altere o valor da variável EXAMPLE no Makefile para compilar e rodar outros exemplos. ou passe via terminal Exemplo:
-> - EXAMPLE=blink make flash
+> Altere o valor da variável EXAMPLE no Makefile para compilar e rodar outros exemplos.
+
+Também é possível rodar testes, mas eles não são executados no aparelho, apenas no host. Para rodar os testes, use o comando:
+- make test
+
+> Códigos que podem ser testados devem ser escritos de forma a não depender de recursos específicos do ESP-IDF, ou seja, devem ser escritos usando apenas a biblioteca padrão do Rust e estarem localizados em src/** e carregados em src/lib.rs.
 
 Mais recursos:
 - https://esp-rs.github.io/std-training/
