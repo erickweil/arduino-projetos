@@ -1,3 +1,4 @@
+# rustc +nightly --version
 [toolchain]
 channel = "nightly"
 components = ["rust-src"]

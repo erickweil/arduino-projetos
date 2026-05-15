@@ -1,7 +1,8 @@
+use std::{thread, time::Duration};
+
 espidf_std::espidf_only! {
     use esp_idf_svc::hal::{gpio::PinDriver, peripherals::Peripherals};
-    use std::{thread, time::Duration};
-
+    
     pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         esp_idf_svc::sys::link_patches();
         esp_idf_svc::log::EspLogger::initialize_default();

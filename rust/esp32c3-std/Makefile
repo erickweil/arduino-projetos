@@ -1,7 +1,6 @@
-EXAMPLE    := primos
-
-BOARD	   := esp32c3
-TARGET     := riscv32imc-esp-espidf
+EXAMPLE    ?= blink
+BOARD	   ?= esp32c3
+TARGET     ?= riscv32imc-esp-espidf
 
 BINARY     := examples/$(EXAMPLE)
 BUILD_TYPE := release

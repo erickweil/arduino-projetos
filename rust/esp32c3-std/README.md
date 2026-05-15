@@ -17,6 +17,48 @@ Também é possível rodar testes, mas eles não são executados no aparelho, ap
 
 > Códigos que podem ser testados devem ser escritos de forma a não depender de recursos específicos do ESP-IDF, ou seja, devem ser escritos usando apenas a biblioteca padrão do Rust e estarem localizados fora do macro espidf_only!
 
+## Testes no host e o macro `espidf_only!`
+
+O projeto fornece a macro `espidf_only!` (./src/lib.rs), a ideia é permitir ter testes no host sem precisar de hardware.
+
+```rust
+// Importações e funções comuns a todos os ambientes (host e ESP-IDF)
+use std::{thread, time::Duration};
+
+fn soma(a: i32, b: i32) -> i32 {
+    a + b
+}
+
+// Código que usa recursos do ESP-IDF deve ficar dentro do macro espidf_only!
+// Inclusive imports e funções (específicos)
+espidf_std::espidf_only! {
+    use esp_idf_svc::hal::{gpio::PinDriver, peripherals::Peripherals};
+
+    // A função main deve ser public e retornar um Result deste tipo
+    pub fn main() -> Result<(), Box<dyn std::error::Error>> {
+        esp_idf_svc::sys::link_patches();
+        esp_idf_svc::log::EspLogger::initialize_default();
+
+        log::info!("Hello, ESP-IDF! 3 + 5 = {}", soma(3, 5));
+
+        Ok(())
+    }
+}
+
+// Aqui testamos a função soma() sem depender do ESP-IDF, ou seja, sem precisar de hardware. O teste é executado no computador host.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_it() {
+        assert_eq!(soma(3, 5), 8);
+    }
+}
+```
+
+Para detalhes veja o exemplo blink (./examples/blink.rs)
+
 Mais recursos:
 - https://esp-rs.github.io/std-training/
 - https://github.com/esp-rs/esp-idf-svc/tree/master/examples

@@ -2,13 +2,8 @@
 name = "espidf-std"
 version = "0.1.0"
 authors = ["Erick Weil <erick.weil@ifro.edu.br>"]
-edition = "2021"
+edition = "2024"
 resolver = "2"
-rust-version = "1.82"
-
-[[bin]]
-name = "espidf-std"
-harness = false # do not use the built-in cargo test harness -> resolve rust-analyzer errors
 
 [profile.release]
 opt-level = "s"
@@ -18,13 +13,21 @@ debug = true    # Symbols are nice, and they don't increase the size on Flash
 opt-level = "z"
 
 [features]
-default = ["espidf"]
+# Feature base: habilita toda a stack ESP-IDF
 espidf = ["dep:esp-idf-svc", "dep:embassy-time"]
-# DEPOIS: ver como adicionar outros chips (env MCU?)
-# Esp32-C3 SuperMini
+
+# --- Chips suportados ---
+# Adicionar aqui novos chips conforme necessário.
+# Cada chip deve depender de "espidf" (e futuramente de features específicas do chip).
+
+# Esp32-C3 SuperMini (RISC-V, target: riscv32imc-esp-espidf)
 esp32c3 = ["espidf"]
-# Heltec Wireless Tracker (ESP32-S3FN8)
+
+# Heltec Wireless Tracker (ESP32-S3FN8, Xtensa, target: xtensa-esp32s3-espidf)
 # esp32s3 = ["espidf"]
+
+# O chip padrão para desenvolvimento local. Trocar conforme a placa em uso.
+default = ["esp32c3"]
 
 [dependencies]
 log = "0.4"
