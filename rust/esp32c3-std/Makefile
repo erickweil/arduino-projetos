@@ -1,6 +1,9 @@
-EXAMPLE    := blink
-BINARY     := examples/$(EXAMPLE)
+EXAMPLE    := primos
+
+BOARD	   := esp32c3
 TARGET     := riscv32imc-esp-espidf
+
+BINARY     := examples/$(EXAMPLE)
 BUILD_TYPE := release
 ELF        := target/$(TARGET)/$(BUILD_TYPE)/$(BINARY)
 PORT       ?= # ex: PORT=/dev/ttyUSB0
@@ -8,12 +11,12 @@ PORT       ?= # ex: PORT=/dev/ttyUSB0
 # Para placas Xtensa tem que ser com esse aqui
 # Precisa ter instalado o espup "espup install"
 build-espup:
-	. ${HOME}/export-esp.sh && cargo build --example ${EXAMPLE} --release
+	. ${HOME}/export-esp.sh && cargo build --example ${EXAMPLE} --target ${TARGET} --features "$(BOARD)" --release
 
 # Placas RISC-V (ex: ESP32-C3) pode ser rust normal
 # Precisa ter instalado a toolchain com rust-src e o target "rustup target add riscv32imc-unknown-none-elf" para ESP32-C3
 build-rust:
-	cargo build --example ${EXAMPLE} --release
+	cargo build --example ${EXAMPLE} --target ${TARGET} --features "$(BOARD)" --release
 
 ## Faz flash na placa (usa espflash com monitor integrado)
 ## https://github.com/esp-rs/esp-idf-template#flash
@@ -26,7 +29,7 @@ monitor:
 
 ## Executa os testes (NO HOST)
 test:
-	cargo test --lib --no-default-features --target x86_64-unknown-linux-gnu
+	cargo test --example ${EXAMPLE} --no-default-features --target "x86_64-unknown-linux-gnu"
 
 ## Simula no Wokwi (requer extensão Wokwi no VS Code ou wokwi-cli)
 simulate: build-rust

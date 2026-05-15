@@ -1,5 +1,5 @@
 [package]
-name = "esp32c3-std"
+name = "espidf-std"
 version = "0.1.0"
 authors = ["Erick Weil <erick.weil@ifro.edu.br>"]
 edition = "2021"
@@ -7,7 +7,7 @@ resolver = "2"
 rust-version = "1.82"
 
 [[bin]]
-name = "esp32c3-std"
+name = "espidf-std"
 harness = false # do not use the built-in cargo test harness -> resolve rust-analyzer errors
 
 [profile.release]
@@ -20,6 +20,11 @@ opt-level = "z"
 [features]
 default = ["espidf"]
 espidf = ["dep:esp-idf-svc", "dep:embassy-time"]
+# DEPOIS: ver como adicionar outros chips (env MCU?)
+# Esp32-C3 SuperMini
+esp32c3 = ["espidf"]
+# Heltec Wireless Tracker (ESP32-S3FN8)
+# esp32s3 = ["espidf"]
 
 [dependencies]
 log = "0.4"

@@ -1,6 +1,6 @@
 use std::{thread, time::Duration};
 
-use esp_idf_svc::hal::{gpio::{PinDriver}, peripherals::Peripherals};
+use esp_idf_svc::hal::{gpio::PinDriver, peripherals::Peripherals};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // It is necessary to call this function once. Otherwise, some patches to the runtime
