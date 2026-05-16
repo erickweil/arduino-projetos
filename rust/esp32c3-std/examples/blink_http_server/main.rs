@@ -1,15 +1,19 @@
-use esp_idf_svc::{http::{Method, server::EspHttpServer}, sys::{esp_wifi_get_max_tx_power, esp_wifi_set_max_tx_power}, wifi::AccessPointConfiguration};
 /// Blink de LED e servidor HTTP usando ESP-IDF e Rust
+/// 
+/// Conecte-se ao wifi e então acesse http://192.168.71.1/
+/// 
 /// Baseado em https://github.com/esp-rs/esp-idf-svc/blob/master/examples/wifi.rs
 /// https://github.com/esp-rs/esp-idf-svc/blob/master/examples/http_server.rs
 /// 
 
 // Importações e funções comuns a todos os ambientes (host e ESP-IDF)
 use espidf_std::prelude::*;
-use std::{cell::RefCell, thread, time::Duration};
+use std::{thread, time::Duration};
 
-// Configurações de Wi-Fi
-// 34 * 0.25 dBm = 8.5 dBm
+/// Configurações de Wi-Fi
+/// O intervalo permitido é de [8, 84], o que corresponde a uma potência real de 2 dBm a 20 dBm.
+/// A unidade do parâmetro de potência (power) é de 0.25 dBm.
+/// 34 * 0.25 dBm = 8.5 dBm
 const MAX_RADIO_POWER: i8 = 34;
 
 const SSID: &str = match option_env!("WIFI_SSID") {
@@ -21,7 +25,13 @@ const PASSWORD: &str = match option_env!("WIFI_PASS") {
     None => "12345678",
 };
 
+// true para Access Point, false para Client
+const WIFI_AP_MODE: bool = true;
+
+// Html das páginas, sem precisar de alocação dinâmica (String)
 static INDEX_HTML: &str = include_str!("index.html");
+static HTML_LED_ON: &str = "<html><head><meta http-equiv=\"refresh\" content=\"2\"></head><body><h1>LED LIGADO</h1></body></html>";
+static HTML_LED_OFF: &str = "<html><head><meta http-equiv=\"refresh\" content=\"2\"></head><body><h1>LED DESLIGADO</h1></body></html>";
 
 // Need lots of stack to parse JSON
 const STACK_SIZE: usize = 10240;
@@ -32,11 +42,13 @@ const CHANNEL: u8 = 2;
 // Inclusive imports e funções específicas
 espidf_only! {
     use esp_idf_svc::{
-        http::{Headers, Method},
-        io::{Read, Write},
-        wifi::{AuthMethod, AccessPointInfo, ClientConfiguration, Configuration},
+        http::{Method, server::EspHttpServer}, 
+        io::Write,
+        sys::esp_wifi_set_max_tx_power, 
+        wifi::{AuthMethod, ClientConfiguration, Configuration, AccessPointConfiguration},
     };
-    use esp_idf_svc::hal::{gpio::PinDriver, peripherals::Peripherals};
+
+    use esp_idf_svc::hal::{gpio, peripherals::Peripherals};
     use std::sync::{Arc, Mutex};
     use esp_idf_svc::eventloop::EspSystemEventLoop;
     use esp_idf_svc::nvs::EspDefaultNvsPartition;
@@ -59,34 +71,21 @@ espidf_only! {
 
         // Configure the LED pin (GPIO8) as output
         // Board: ESP32-C3 Super Mini
-        let mut led_builtin = PinDriver::output(peripherals.pins.gpio8)?;
+        let mut led_builtin = gpio::PinDriver::output(peripherals.pins.gpio8)?;
         led_builtin.set_high()?;
 
         let mut wifi = BlockingWifi::wrap(
             EspWifi::new(peripherals.modem, sys_loop.clone(), Some(nvs))?,
             sys_loop,
         )?;
-        config_wifi_ap(&mut wifi)?;
+        config_wifi(&mut wifi)?;
 
         let mut server = EspHttpServer::new(&esp_idf_svc::http::server::Configuration {
             stack_size: STACK_SIZE,
             ..Default::default()
         })?;
-
-        // Com uma única rota pode passar o ownership, mas precisa de RefCell para mutabilidade
-        let led_builtin = RefCell::new(led_builtin);
-        server.fn_handler("/", Method::Get, move |req| {
-            // detecta o parâmetro de query `led` e liga/desliga o LED de acordo
-            let query = req.uri().split('?').nth(1).unwrap_or("");
-            if query.contains("led=on") {
-                led_builtin.borrow_mut().set_low()?;
-            } else if query.contains("led=off") {
-                led_builtin.borrow_mut().set_high()?;
-            }
-
-            req.into_ok_response()?
-                .write_all(INDEX_HTML.as_bytes())
-                .map(|_| ())
+        config_server(&mut server, AppState { 
+            led_builtin 
         })?;
 
         // Keep wifi and the server running beyond when main() returns (forever)
@@ -107,28 +106,76 @@ espidf_only! {
         // }
     }
 
-    fn config_wifi_ap(wifi: &mut BlockingWifi<EspWifi<'static>>) -> Result<()> {
-        /*let wifi_configuration: Configuration = Configuration::Client(ClientConfiguration {
-            ssid: SSID.trim().try_into().unwrap(),
-            bssid: None,
-            auth_method: AuthMethod::WPAWPA2Personal,
-            password: PASSWORD.trim().try_into().unwrap(),
-            channel: None,
-            pmf_cfg: esp_idf_svc::wifi::PmfConfiguration::Capable { required: false },
-            ..Default::default()
-        });*/
+    struct AppState {
+        led_builtin: gpio::PinDriver<'static, gpio::Output>,
+    }
+    fn config_server(server: &mut EspHttpServer, app_state: AppState) -> Result<()> {
+        // Arc<Mutex<T>> permite compartilhar estado entre múltiplas rotas de forma segura
+        let app_state = Arc::new(Mutex::new(app_state));
+
+        server.fn_handler("/", Method::Get, move |req| {
+            req.into_ok_response()?
+                .write_all(INDEX_HTML.as_bytes())
+                .map(|_| ())
+        })?;
+
+        // Passa uma cópia do Arc para cada handler que precisar
+        let handler_state = app_state.clone();
+        server.fn_handler("/led", Method::Post, move |req| {
+            let mut app_state = handler_state.lock().unwrap();
+
+            app_state.led_builtin.toggle()?;
+            
+            // Redireciona de volta para a página principal
+            req.into_response(302, None, &[("Location", "/")])
+                .map(|_| ())
+        })?;
+
+        // no último handler pode fazer move do Arc
+        let handler_state = app_state;
+        server.fn_handler("/led", Method::Get, move |req| {
+            let app_state = handler_state.lock().unwrap();
+
+            let led_state = app_state.led_builtin.is_set_low();
+
+            req.into_ok_response()?
+                .write_all(if led_state { 
+                    HTML_LED_ON
+                 } else { 
+                    HTML_LED_OFF
+                 }.as_bytes())
+                .map(|_| ())
+        })?;
+
+        Ok(())
+    }
+
+    fn config_wifi(wifi: &mut BlockingWifi<EspWifi<'static>>) -> Result<()> {
+        /*let wifi_configuration: Configuration = */
 
         // If instead of creating a new network you want to serve the page
         // on your local network, you can replace this configuration with
         // the client configuration from the http_client example.
-        let wifi_configuration = Configuration::AccessPoint(AccessPointConfiguration {
-            ssid: SSID.try_into().unwrap(),
-            ssid_hidden: false,
-            auth_method: AuthMethod::WPA2Personal,
-            password: PASSWORD.try_into().unwrap(),
-            channel: CHANNEL,
-            ..Default::default()
-        });
+        let wifi_configuration = if WIFI_AP_MODE {
+            Configuration::AccessPoint(AccessPointConfiguration {
+                ssid: SSID.try_into().unwrap(),
+                ssid_hidden: false,
+                auth_method: AuthMethod::WPA2Personal,
+                password: PASSWORD.try_into().unwrap(),
+                channel: CHANNEL,
+                ..Default::default()
+            })
+        } else {
+            Configuration::Client(ClientConfiguration {
+                ssid: SSID.trim().try_into().unwrap(),
+                bssid: None,
+                auth_method: AuthMethod::WPAWPA2Personal,
+                password: PASSWORD.trim().try_into().unwrap(),
+                channel: None,
+                pmf_cfg: esp_idf_svc::wifi::PmfConfiguration::Capable { required: false },
+                ..Default::default()
+            })
+        };
 
         wifi.set_configuration(&wifi_configuration)?;
 
@@ -138,6 +185,7 @@ espidf_only! {
         // --- Redução da Potência de Transmissão (Hardware Brownout Fix) ---
         // O problema: o rádio RF liga e puxa um pico de corrente repentino que pode passar de 300mA.
         // Reduzir a potência de transmissão (ironicamente) ajuda a estabilizar o sinal nessas placas, pois diminui o ruído no circuito regulador de tensão interno.
+        // SAFETY: é só um binding do código C
         unsafe {
             let err = esp_wifi_set_max_tx_power(MAX_RADIO_POWER);
             if err != 0 {
@@ -145,39 +193,36 @@ espidf_only! {
             }
         }
 
-        /*
-        // Só é necessário conectar se for modo cliente
-        let aps: Vec<AccessPointInfo> = wifi.scan()?;
-        log::info!("Redes encontradas ({}):", aps.len());
-        for ap in &aps {
-            log::info!("  SSID: `{}` | Canal: {} | RSSI: {} dBm | Auth: {:?}",
-                ap.ssid, ap.channel, ap.signal_strength, ap.auth_method);
-        }
+        if WIFI_AP_MODE {
+            log::info!("Created Wi-Fi AP with WIFI_SSID `{SSID}` and password `{PASSWORD}`");
 
-        log::info!("Connecting to Wi-Fi with WIFI_SSID `{SSID}` and WIFI_PASS `{PASSWORD}`");
-        //log::info!("Connecting to Wi-Fi with WIFI_SSID `{SSID}`");
-        wifi.connect()?;
-        log::info!("Wifi connected");
-        */
-        log::info!("Create Wi-Fi with WIFI_SSID `{SSID}` and WIFI_PASS `{PASSWORD}`");
+            wifi.wait_netif_up()?;
+            log::info!("Wifi netif up");
 
-        wifi.wait_netif_up()?;
-        log::info!("Wifi netif up");
+            let ip_info = wifi.wifi().ap_netif().get_ip_info()?;
+            log::info!("Running on IP {}", ip_info.ip);
+        } else {
+            /*
+                let aps: Vec<AccessPointInfo> = wifi.scan()?;
+                log::info!("Redes encontradas ({}):", aps.len());
+                for ap in &aps {
+                    log::info!("  SSID: `{}` | Canal: {} | RSSI: {} dBm | Auth: {:?}",
+                        ap.ssid, ap.channel, ap.signal_strength, ap.auth_method);
+                }
+            */
 
-        //let ip_info = wifi.wifi().sta_netif().get_ip_info()?;
-        let ip_info = wifi.wifi().ap_netif().get_ip_info()?;
-        log::info!("Running on IP {}", ip_info.ip);
+            // Só é necessário conectar se for modo cliente
+            log::info!("Connecting Wi-Fi with WIFI_SSID `{SSID}` and password `{PASSWORD}`");
+            wifi.connect()?;
+            log::info!("Wifi connected");
+
+            wifi.wait_netif_up()?;
+            log::info!("Wifi netif up");
+
+            let ip_info = wifi.wifi().sta_netif().get_ip_info()?;
+            log::info!("Running on IP {}", ip_info.ip);
+        }     
 
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_it() {
-        assert_eq!(2 + 2, 4);
     }
 }
