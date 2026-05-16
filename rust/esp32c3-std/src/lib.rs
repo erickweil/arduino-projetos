@@ -1,3 +1,5 @@
+pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
 /// Macro para encapsular o boilerplate para rodar o código apenas no aparelho
 /// e ainda poder ter testes de código puro que rodam no host. 
 /// 
@@ -17,7 +19,7 @@
 macro_rules! espidf_only {
     ($($body:tt)*) => {
         #[cfg(feature = "espidf")]
-        fn main() -> Result<(), Box<dyn std::error::Error>> {
+        fn main() -> $crate::Result<()> {
             example::main()
         }
 
@@ -33,4 +35,9 @@ macro_rules! espidf_only {
             $($body)*
         }
     };
+}
+
+pub mod prelude {
+    pub use crate::Result;
+    pub use crate::espidf_only;
 }

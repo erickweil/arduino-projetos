@@ -14,6 +14,10 @@ MCU = "esp32c3"
 ESP_IDF_VERSION = "v5.5.3"
 ESP_IDF_TOOLS_INSTALL_DIR = "global"
 
+# WIFI_SSID = "EspWifi"
+# WIFI_PASS = "12345678"
+
+
 # Uncomment this if you have moved the target dir by setting CARGO_TARGET_DIR or similar.
 # Required for now due to embuild limitations.
 #CARGO_WORKSPACE_DIR = { value = "", relative = true }

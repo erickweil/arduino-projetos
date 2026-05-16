@@ -1,4 +1,5 @@
 // Importações e funções comuns a todos os ambientes (host e ESP-IDF)
+use espidf_std::prelude::*;
 use std::{thread, time::Duration};
 
 fn delay(ms: u64) {
@@ -17,10 +18,10 @@ fn criar_contador() -> impl FnMut() -> u64 {
 
 // Código que usa recursos do ESP-IDF deve ficar dentro do macro espidf_only!
 // Inclusive imports e funções específicas
-espidf_std::espidf_only! {
+espidf_only! {
     use esp_idf_svc::hal::{gpio::PinDriver, peripherals::Peripherals};
 
-    pub fn main() -> Result<(), Box<dyn std::error::Error>> {
+    pub fn main() -> Result<()> {
         // It is necessary to call this function once. Otherwise, some patches to the runtime
         // implemented by esp-idf-sys might not link properly. See https://github.com/esp-rs/esp-idf-template/issues/71
         esp_idf_svc::sys::link_patches();
@@ -44,7 +45,7 @@ espidf_std::espidf_only! {
             log::info!("Contador: {}", contador());
             led_builtin.toggle()?;
 
-            delay(1000);
+            delay(500);
         }
     }
 }
