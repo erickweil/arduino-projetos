@@ -1,4 +1,4 @@
-EXAMPLE ?= primos
+EXAMPLE ?= tft-st7735
 # MCU  	?= esp32c3
 MCU	   	?= esp32s3
 

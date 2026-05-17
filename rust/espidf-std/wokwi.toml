@@ -1,7 +1,7 @@
 [wokwi]
 version = 1
 gdbServerPort = 3333
-elf = "target/xtensa-esp32s3-espidf/release/examples/primos"
-firmware = "target/xtensa-esp32s3-espidf/release/examples/primos"
+elf = "target/xtensa-esp32s3-espidf/release/examples/tft-st7735"
+firmware = "target/xtensa-esp32s3-espidf/release/examples/tft-st7735"
 # elf = "target/xtensa-esp32s3-espidf/release/examples/hello"
 # firmware = "target/xtensa-esp32s3-espidf/release/examples/hello"

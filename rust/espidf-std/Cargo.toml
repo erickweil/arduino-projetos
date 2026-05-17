@@ -27,13 +27,15 @@ esp32c3 = ["espidf"]
 esp32s3 = ["espidf"]
 
 # genérico para desenvolvimento local (para rust-analyzer funcionar)
-default = ["espidf"]
+default = ["esp32s3"]
 
 [dependencies]
 log = "0.4"
 esp-idf-svc = { version = "0.52.1", features = ["critical-section", "embassy-time-driver", "embassy-sync"], optional = true }
 # Remove `generic-queue-8` if you plan to use `embassy-time` WITH `embassy-executor`
 embassy-time = { version = "0.5", features = ["generic-queue-8"], optional = true }
+embedded-graphics = "0.8.2"
+mipidsi = "0.10.0"
 
 [build-dependencies]
 embuild = "0.33"
