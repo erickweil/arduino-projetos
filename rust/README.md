@@ -11,6 +11,7 @@
 ## Blog:
 - https://medium.com/@ninjapiraatti/rust-on-esp32-part-1-simulate-esp32c3-in-vscode-2df81604f1e3
 - https://medium.com/@ninjapiraatti/rust-on-esp32-part-2-flashing-esp32c3-with-a-simple-example-526f88e549bc
+- https://blog.theembeddedrustacean.com/the-embedded-rust-esp-development-ecosystem (std vs no-std)
 
 ## Outros links
 https://www.reddit.com/r/rust/comments/19d6qlv/easiest_way_to_get_into_embedded_with_an_esp32/
