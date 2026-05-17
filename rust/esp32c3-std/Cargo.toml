@@ -24,10 +24,10 @@ espidf = ["dep:esp-idf-svc", "dep:embassy-time"]
 esp32c3 = ["espidf"]
 
 # Heltec Wireless Tracker (ESP32-S3FN8, Xtensa, target: xtensa-esp32s3-espidf)
-# esp32s3 = ["espidf"]
+esp32s3 = ["espidf"]
 
-# O chip padrão para desenvolvimento local. Trocar conforme a placa em uso.
-default = ["esp32c3"]
+# genérico para desenvolvimento local (para rust-analyzer funcionar)
+default = ["espidf"]
 
 [dependencies]
 log = "0.4"

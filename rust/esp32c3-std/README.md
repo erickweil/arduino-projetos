@@ -64,3 +64,20 @@ Mais recursos:
 - https://github.com/esp-rs/esp-idf-svc/tree/master/examples
 - https://github.com/esp-rs/esp-idf-hal/tree/master/examples
 - https://github.com/esp-rs/esp-idf-sys/tree/master/examples
+
+## Roadmap
+
+A ideia aqui é validar o uso do Rust em pequenos exemplos para os requisitos básicos de projetos em geral, mas começando com o que o sistema de rastreio precisaria.
+
+Esp32C3 Super Mini:
+- [x] ./examples/primos.rs Rust com suporte std para o ESP32 (esp-idf-template)
+- [x] ./examples/blink_http_server/ Utilização do Wifi
+- [ ] Utilizar Sistema de arquivos LiffleFS
+- [ ] Comunicação MQTT
+
+Heltec Wireless Tracker (Esp32S3FN8):
+- [ ] Interação com módulo GPS via UART
+- [ ] Utilizar Display ST7735
+- [ ] Comunicação LoRaWAN
+
+Se tudo isso funcionar criar novo projeto de rastreio em rust. 

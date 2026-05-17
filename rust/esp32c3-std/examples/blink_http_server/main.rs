@@ -18,15 +18,15 @@ const MAX_RADIO_POWER: i8 = 34;
 
 const SSID: &str = match option_env!("WIFI_SSID") {
     Some(ssid) => ssid,
-    None => env!("MCU"),
+    None => "Wokwi-GUEST",
 };
 const PASSWORD: &str = match option_env!("WIFI_PASS") {
     Some(pass) => pass,
-    None => "12345678",
+    None => "",
 };
 
 // true para Access Point, false para Client
-const WIFI_AP_MODE: bool = true;
+const WIFI_AP_MODE: bool = false;
 
 // Html das páginas, sem precisar de alocação dinâmica (String)
 static INDEX_HTML: &str = include_str!("index.html");
@@ -69,9 +69,11 @@ espidf_only! {
         let sys_loop = EspSystemEventLoop::take()?;
         let nvs = EspDefaultNvsPartition::take()?;
 
-        // Configure the LED pin (GPIO8) as output
-        // Board: ESP32-C3 Super Mini
-        let mut led_builtin = gpio::PinDriver::output(peripherals.pins.gpio8)?;
+        let mut led_builtin = gpio::PinDriver::output(
+            // Board: ESP32-C3 Super Mini, GPIO8
+            if cfg!(feature = "esp32c3") { peripherals.pins.gpio8 } 
+            else { panic!("Qual led usar?") }
+        )?;
         led_builtin.set_high()?;
 
         let mut wifi = BlockingWifi::wrap(
@@ -151,26 +153,27 @@ espidf_only! {
     }
 
     fn config_wifi(wifi: &mut BlockingWifi<EspWifi<'static>>) -> Result<()> {
-        /*let wifi_configuration: Configuration = */
+        let auth_method = if PASSWORD.is_empty() {
+            AuthMethod::None
+        } else {
+            AuthMethod::WPAWPA2Personal
+        };
 
-        // If instead of creating a new network you want to serve the page
-        // on your local network, you can replace this configuration with
-        // the client configuration from the http_client example.
         let wifi_configuration = if WIFI_AP_MODE {
             Configuration::AccessPoint(AccessPointConfiguration {
                 ssid: SSID.try_into().unwrap(),
                 ssid_hidden: false,
-                auth_method: AuthMethod::WPA2Personal,
+                auth_method: auth_method,
                 password: PASSWORD.try_into().unwrap(),
                 channel: CHANNEL,
                 ..Default::default()
             })
         } else {
             Configuration::Client(ClientConfiguration {
-                ssid: SSID.trim().try_into().unwrap(),
+                ssid: SSID.try_into().unwrap(),
                 bssid: None,
-                auth_method: AuthMethod::WPAWPA2Personal,
-                password: PASSWORD.trim().try_into().unwrap(),
+                auth_method: auth_method,
+                password: PASSWORD.try_into().unwrap(),
                 channel: None,
                 pmf_cfg: esp_idf_svc::wifi::PmfConfiguration::Capable { required: false },
                 ..Default::default()

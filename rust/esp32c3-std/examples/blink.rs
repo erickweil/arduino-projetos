@@ -34,9 +34,12 @@ espidf_only! {
         let peripherals = Peripherals::take()?;
         // let sysloop = EspSystemEventLoop::take()?;
 
-        // Configure the LED pin (GPIO8) as output
-        // Board: ESP32-C3 Super Mini
-        let mut led_builtin = PinDriver::output(peripherals.pins.gpio8)?;
+        // Configure the LED pin
+        let mut led_builtin = PinDriver::output(
+            // Board: ESP32-C3 Super Mini, GPIO8
+            if cfg!(feature = "esp32c3") { peripherals.pins.gpio8 } 
+            else { panic!("Qual led usar?") }
+        )?;
         led_builtin.set_low()?;
 
         // The main loop of the application
