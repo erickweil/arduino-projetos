@@ -1,95 +1,157 @@
-// Exemplo: Display TFT ST7735s (0.96", 160x80) onboard do Heltec Wireless Tracker
-//
-// Os pinos são mapeados via WirelessTrackerPins (src/lib.rs).
-// Compile com: cargo build --example tft-st7735 --features esp32s3
-
+/// Exemplo: Display TFT ST7735s (0.96", 160x80) onboard do Heltec Wireless Tracker
+/// Baseado no exemplo:
+/// https://github.com/esp-rs/esp-idf-hal/blob/master/examples/spi_st7789.rs
+/// 
+/// Código com pinagem para placa Heltec Wireless Tracker (ESP32-S3FN8, display TFT ST7735s 160×80):
+/// https://heltec.org/project/wireless-tracker/
+///
+/// Código da biblioteca ST7735 do Heltec Wireless Tracker (HT_st7735.h): 
+/// (Para offsets e configuração específica do display 160×80 do HT Tracker)
+/// https://github.com/HelTecAutomation/Heltec_ESP32/blob/master/src/HT_st7735.h
+///
+/// Outros recursos:
+/// - https://esp32.implrust.com/tft-display/index.html
+/// - https://wokwi.com/projects/393180528527977473
+///
 use espidf_std::prelude::*;
-use mipidsi::{TestImage, options::{Orientation, Rotation}};
+use std::{thread, time::Duration};
+use mipidsi::{
+    Builder,
+    interface::SpiInterface,
+    models::ST7735s,
+    options::{ColorInversion, ColorOrder, Orientation, Rotation},
+    TestImage,
+};  
+use embedded_graphics::{
+    mono_font::{MonoTextStyle, ascii::FONT_10X20}, pixelcolor::Rgb565, prelude::*, primitives::Rectangle, text::Text
+};
+
+struct DrawBouncingText {
+    text: &'static str,
+    screen_size: Size,
+    position: Point,
+    velocity: Point,
+}
+
+impl  DrawBouncingText {
+    fn new(text: &'static str, screen_size: Size, position: Point, velocity: Point) -> Self {
+        Self { text, screen_size, position, velocity }
+    }
+
+    pub fn draw<D>(&mut self, target: &mut D) -> Result<()>
+    where
+        D: DrawTarget<Color = Rgb565>,
+        D::Error: core::fmt::Debug,
+    {
+        // Dimensões do retângulo com texto (FONT_10X20: 10px/char, 20px altura)
+        let text_width = (self.text.len() as i32 * 10) + 10; // largura do texto + padding
+        let text_height = 28; // altura do texto + padding
+
+        // Verifica colisão e muda direção ao bater nos cantos/bordas
+        if self.position.x <= 0 || self.position.x + text_width >= self.screen_size.width as i32 {
+            self.velocity.x = -self.velocity.x;
+        }
+        if self.position.y <= 0 || self.position.y + text_height >= self.screen_size.height as i32 {
+            self.velocity.y = -self.velocity.y;
+        }
+
+        // Move posição
+        self.position += self.velocity;
+
+        // Garante que não saia da tela
+        self.position.x = self.position.x.clamp(0, self.screen_size.width as i32 - text_width);
+        self.position.y = self.position.y.clamp(0, self.screen_size.height as i32 - text_height);
+
+        // Limpa o quadrado onde o texto será desenhado
+        let clear_area = Rectangle::new(
+            self.position,
+            Size::new(text_width as u32, text_height as u32)
+        );
+        target.fill_solid(&clear_area, Rgb565::BLACK)
+            .map_err(|e| format!("Erro fill_solid! {:?}", e))?;
+
+        // Cor pseudo aleatória baseada na posição (para dar um efeito visual mais interessante)
+        let color = Rgb565::new(
+            ((self.position.x * 71) % 32) as u8, // R
+            ((self.position.y * 83) % 64) as u8, // G
+            ((self.position.x * 31 + self.position.y * 23) % 32) as u8, // B
+        );
+
+        Text::new(
+            self.text,
+            Point::new(self.position.x + 5, self.position.y + 20), // posição do texto dentro da caixa
+            MonoTextStyle::new(&FONT_10X20, color)
+        )
+        .draw(target)
+        .map_err(|e| format!("Erro draw! {:?}", e))?;
+
+        Ok(())
+    }
+}
 
 espidf_only! {
     use esp_idf_svc::hal::gpio;
-    use espidf_std::wireless_tracker::WirelessTrackerPins;
-    use embedded_graphics::{
-        mono_font::{ascii::FONT_10X20, MonoTextStyle},
-        pixelcolor::Rgb565,
-        prelude::*,
-        primitives::{Rectangle, PrimitiveStyleBuilder},
-        text::Text,
-    };
     use esp_idf_svc::hal::{
         self,
         gpio::PinDriver,
         peripherals::Peripherals,
-        //spi::{Spi, SpiDeviceDriver, SpiDriver, SpiDriverConfig, config::Config as SpiConfig},
         spi::{self},
         units::MegaHertz,
-    };
-    use mipidsi::{
-        Builder,
-        interface::SpiInterface,
-        models::ST7735s,
-        options::{ColorInversion, ColorOrder, Orientation},
-    };
-    use std::{thread, time::Duration};
+    };  
 
     pub fn main() -> Result<()> {
         esp_idf_svc::sys::link_patches();
         esp_idf_svc::log::EspLogger::initialize_default();
 
-        log::info!("Iniciando display TFT ST7735s...");
+        log::info!("Iniciando display TFT ST7735...");
 
         let peripherals = Peripherals::take()?;
-        let board = WirelessTrackerPins::new(peripherals.pins);
 
-        // Vext Ctrl: HIGH para energizar display e GNSS onboard
-        let mut vext = PinDriver::output(board.vext_ctrl)?;
+        // Configuração de Pinos do display para o Heltec Wireless Tracker
+        let spi = peripherals.spi2;
+        let rst = PinDriver::output(peripherals.pins.gpio39)?;
+        let dc = PinDriver::output(peripherals.pins.gpio40)?;
+        let mut backlight = PinDriver::output(peripherals.pins.gpio21)?;
+        let sclk = peripherals.pins.gpio41;
+        let sda = peripherals.pins.gpio42;
+        let sdi = None::<gpio::AnyInputPin>;
+        let cs = Some(peripherals.pins.gpio38);
+        let mut vext = PinDriver::output(peripherals.pins.gpio3)?; // Vext Ctrl: HIGH para energizar display e GNSS onboard
+        
+        // Habilita Vext para alimentar o display e módulo GNSS onboard
         vext.set_high()?;
         thread::sleep(Duration::from_millis(50));
-
-        // Backlight: HIGH para acender o display
-        let mut backlight = PinDriver::output(board.tft_bl)?;
+        // Liga o backlight
         backlight.set_high()?;
+        thread::sleep(Duration::from_millis(50));
 
-        let dc  = PinDriver::output(board.tft_dc)?;
-        let rst = PinDriver::output(board.tft_rst)?;
-
-        // SPI2: MOSI, SCK, sem MISO
-        let spi_driver = spi::SpiDriver::new(
-            peripherals.spi2,
-            board.tft_sclk,
-            board.tft_mosi,
-            None::<gpio::AnyInputPin>,
+        let spi_device = spi::SpiDeviceDriver::new_single(
+            spi,
+            sclk,
+            sda,
+            sdi,
+            cs,
             &spi::SpiDriverConfig::new(),
-            //&spi::SpiDriverConfig::default().dma(spi::Dma::Auto(4096)),
+            &spi::SpiConfig::new()
+                .baudrate(MegaHertz(26).into()),
+                //.data_mode(MODE_3), // note that in order for the ST7789 to work, the data_mode needs to be set to MODE_3
         )?;
 
-        let spi_device = spi::SpiDeviceDriver::new(
-            &spi_driver,
-            Some(board.tft_cs),
-            &spi::SpiConfig::default()
-                .baudrate(MegaHertz(27).into()),
-        )?;
-
-        // Buffer intermediário exigido pelo SpiInterface do mipidsi
+        // display interface abstraction from SPI and DC
         let mut buffer = [0u8; 512];
-        let spi_interface = SpiInterface::new(spi_device, dc, &mut buffer);
+        let di = SpiInterface::new(
+            spi_device, 
+            dc, 
+            &mut buffer
+        );
 
-        // Display ST7735s — configuração para o chip Wokwi (chip-st7735, 128×160)
-        // O chip Wokwi é um ST7735 padrão 128×160, sem offset, RGB565.
-        // Para hardware real (Heltec Wireless Tracker 160×80):
-        //   .display_size(160, 80).display_offset(1, 26).color_order(ColorOrder::Bgr)
-        let mut display = Builder::new(ST7735s, spi_interface)
-            // Wokwi
-            //.display_size(128, 160)
-            //.display_offset(0, 0)
-            //.color_order(ColorOrder::Rgb)
-            //.invert_colors(ColorInversion::Normal)
+        // crate driver
+        let mut display = Builder::new(ST7735s, di)
             // Heltec Wireless Tracker
             .display_size(80, 160)
             .display_offset(26, 1)
             .color_order(ColorOrder::Bgr)
             .invert_colors(ColorInversion::Inverted)
-            // MY|MV do HT_st7735.h = landscape com flip vertical
             .orientation(Orientation::new().rotate(Rotation::Deg270))
             .reset_pin(rst)
             .init(&mut hal::delay::Ets)
@@ -110,56 +172,41 @@ espidf_only! {
         display.clear(Rgb565::BLACK)
             .map_err(|e| format!("Erro clear: {e:?}"))?;
 
-        // --- DVD bouncing "Ola mundo!" ---
-        // Dimensões do display em landscape
-        let SCREEN_W: i32 = display.size().width as i32;
-        let SCREEN_H: i32 = display.size().height as i32;
-        // Dimensões do retângulo com texto (FONT_10X20: 10px/char, 20px altura)
-        // "Ola mundo!" = 10 chars * 10px = 100px largura + padding
-        const BOX_W: i32 = 110;
-        const BOX_H: i32 = 28;
-        const PAD_X: i32 = 5;  // padding interno do texto dentro da caixa
-        const PAD_Y: i32 = 20; // baseline do texto dentro da caixa (FONT_10X20)
+        let mut bouncing_text = DrawBouncingText::new(
+            "TESTE",
+            display.size(), 
+            Point::new(0, 0), 
+            Point::new(2, 1)
+        );
 
-        let mut x: i32 = 0;
-        let mut y: i32 = 0;
-        let mut dx: i32 = 2;
-        let mut dy: i32 = 1;
-
-        let mut color = Rgb565::RED;
         loop {
-            // Move posição
-            x += dx;
-            y += dy;
+            bouncing_text.draw(&mut display)?;
+            thread::sleep(Duration::from_millis(100));
+        }
+    }
+}
 
-            // Verifica colisão e muda cor ao bater nos cantos/bordas
-            let hit_x = x <= 0 || x + BOX_W >= SCREEN_W;
-            let hit_y = y <= 0 || y + BOX_H >= SCREEN_H;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use embedded_graphics::mock_display::MockDisplay;
 
-            if hit_x { dx = -dx; }
-            if hit_y { dy = -dy; }
-            if hit_x || hit_y {
-                // Cor pseudo aleatória
-                color = Rgb565::new(
-                    ((x * 13) % 255) as u8,
-                    ((y * 17) % 255) as u8,
-                    (((x + y) * 23) % 255) as u8
-                );
-            }
+    #[test]
+    fn test_draw() {
+        let mut display = MockDisplay::new();
+        display.set_allow_overdraw(true);
+        // Testa a lógica de movimento e colisão do texto
+        let mut bouncing_text = DrawBouncingText::new(
+            "OK",
+            display.size(), 
+            Point::new(0, 0), 
+            Point::new(5, 3)
+        );
 
-            // Garante que não saia da tela
-            x = x.clamp(0, SCREEN_W - BOX_W);
-            y = y.clamp(0, SCREEN_H - BOX_H);
-
-            Text::new(
-                "Ola mundo!", 
-                Point::new(x + PAD_X, y + PAD_Y), 
-                MonoTextStyle::new(&FONT_10X20, color)
-            )
-            .draw(&mut display)
-            .map_err(|e| format!("Erro draw text: {e:?}"))?;
-
-            thread::sleep(Duration::from_millis(30));
+        // Simula várias atualizações para verificar se o texto se move e colide corretamente
+        // Daria erro se tentar desenhar fora dos limites
+        for _ in 0..500 {
+            bouncing_text.draw(&mut display).unwrap();
         }
     }
 }

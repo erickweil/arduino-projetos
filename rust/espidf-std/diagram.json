@@ -16,9 +16,9 @@
         {
             "type": "chip-st7735",
             "id": "tft",
-            "top": 180,
-            "left": 200,
-            "rotate": 0
+            "top": 150,
+            "left": -64,
+            "rotate": 90
         }
     ],
     "connections": [

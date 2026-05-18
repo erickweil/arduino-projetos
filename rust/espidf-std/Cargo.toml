@@ -27,7 +27,7 @@ esp32c3 = ["espidf"]
 esp32s3 = ["espidf"]
 
 # genérico para desenvolvimento local (para rust-analyzer funcionar)
-default = ["esp32s3"]
+default = ["espidf"]
 
 [dependencies]
 log = "0.4"
