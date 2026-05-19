@@ -1,0 +1,6 @@
+# https://github.com/espressif/esp-idf/blob/master/components/partition_table/partitions_singleapp.csv
+# Name,   Type, SubType, Offset,  Size, Flags
+# Note: if you have increased the bootloader size, make sure to update the offsets to avoid overlap
+nvs,      data, nvs,     ,        0x6000,
+phy_init, data, phy,     ,        0x1000,
+factory,  app,  factory, ,        1M,

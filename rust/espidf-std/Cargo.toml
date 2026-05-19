@@ -37,5 +37,9 @@ embassy-time = { version = "0.5", features = ["generic-queue-8"], optional = tru
 embedded-graphics = "0.8.2"
 mipidsi = "0.10.0"
 
+# https://github.com/esp-rs/esp-idf-svc/blob/master/examples/sd_spi_littlefs.rs
+[[package.metadata.esp-idf-sys.extra_components]]
+remote_component = { name = "joltwallet/littlefs", version = "1.14" }
+
 [build-dependencies]
 embuild = "0.33"

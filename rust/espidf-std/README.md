@@ -72,11 +72,11 @@ A ideia aqui é validar o uso do Rust em pequenos exemplos para os requisitos b�
 Esp32C3 Super Mini:
 - [x] ./examples/primos.rs Rust com suporte std para o ESP32 (esp-idf-template)
 - [x] ./examples/blink_http_server/ Utilização do Wifi
+- [x] Utilizar Sistema de arquivos LittleFS
 - [ ] Comunicação MQTT
-- [ ] Utilizar Sistema de arquivos LiffleFS
 
 Heltec Wireless Tracker (Esp32S3FN8):
-- [x] Utilizar Display ST7735
+- [x] ./examples/tft-st7735.rs Utilizar Display ST7735
 - [ ] Interação com módulo GPS via UART
 - [ ] Comunicação LoRaWAN
 

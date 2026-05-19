@@ -1,6 +1,8 @@
-EXAMPLE ?= tft-st7735
+EXAMPLE ?= littlefs
 # MCU  	?= esp32c3
 MCU	   	?= esp32s3
+PARTITION_TABLE ?= partitions/large_spiffs_8MB.csv
+FLASH_SIZE ?= 8mb
 
 # Mapeamento MCU → TARGET
 ifeq ($(MCU), esp32c3)
@@ -31,7 +33,7 @@ endif
 ## Faz flash na placa (usa espflash com monitor integrado)
 ## https://github.com/esp-rs/esp-idf-template#flash
 flash: build-rust
-	espflash flash $(ELF) --monitor $(if $(PORT),--port $(PORT),)
+	espflash flash $(ELF) $(if $(PARTITION_TABLE),--partition-table $(PARTITION_TABLE),) --monitor $(if $(PORT),--port $(PORT),)
 
 ## Apenas monitora a porta serial (sem flash)
 monitor:
@@ -43,5 +45,9 @@ test:
 	cargo test --example $(EXAMPLE) --no-default-features --target "x86_64-unknown-linux-gnu"
 
 ## Simula no Wokwi (requer extensão Wokwi no VS Code ou wokwi-cli)
+## Acontece que o wokwi não suporta o partitions.csv https://github.com/wokwi/wokwi-features/issues/523
+## Então tem que usar o espflash para gerar a imagem final tudo em um único binário (merge) e depois usar esse binário no Wokwi
 simulate: build-rust
-	wokwi-cli --timeout 0 --flash $(ELF)
+	espflash save-image --flash-size $(FLASH_SIZE) --chip $(MCU) --merge $(if $(PARTITION_TABLE),--partition-table $(PARTITION_TABLE),) $(ELF) target/wokwi_merged.bin
+	echo '{"flash_settings": {"flash_size": "$(FLASH_SIZE)"}, "flash_files": {"0x0": "wokwi_merged.bin"}}' > target/flasher_args.json
+#	wokwi-cli --timeout 0 --flash $(ELF)

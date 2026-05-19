@@ -14,6 +14,7 @@
 /// - https://wokwi.com/projects/393180528527977473
 ///
 use espidf_std::prelude::*;
+
 use std::{thread, time::Duration};
 use mipidsi::{
     Builder,
@@ -33,7 +34,7 @@ struct DrawBouncingText {
     velocity: Point,
 }
 
-impl  DrawBouncingText {
+impl DrawBouncingText {
     fn new(text: &'static str, screen_size: Size, position: Point, velocity: Point) -> Self {
         Self { text, screen_size, position, velocity }
     }
@@ -89,7 +90,8 @@ impl  DrawBouncingText {
     }
 }
 
-espidf_only! {
+target_only! { "esp32s3",
+
     use esp_idf_svc::hal::gpio;
     use esp_idf_svc::hal::{
         self,
@@ -98,7 +100,8 @@ espidf_only! {
         spi::{self},
         units::MegaHertz,
     };  
-
+    
+    
     pub fn main() -> Result<()> {
         esp_idf_svc::sys::link_patches();
         esp_idf_svc::log::EspLogger::initialize_default();
