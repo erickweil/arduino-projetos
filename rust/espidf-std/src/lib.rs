@@ -41,7 +41,6 @@ macro_rules! espidf_only {
         $crate::target_only!("espidf", $($body)*);
     };
 }
-
 pub mod prelude {
     pub use crate::Result;
     pub use crate::espidf_only;

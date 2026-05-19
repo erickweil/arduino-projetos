@@ -1,3 +1,4 @@
+#![allow(unused_imports)]
 /// Exemplo: Display TFT ST7735s (0.96", 160x80) onboard do Heltec Wireless Tracker
 /// Baseado no exemplo:
 /// https://github.com/esp-rs/esp-idf-hal/blob/master/examples/spi_st7789.rs

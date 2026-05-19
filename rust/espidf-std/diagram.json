@@ -10,7 +10,9 @@
             "left": 0,
             "rotate": 90,
             "attrs": {
-                "flashSize": "16"
+                "flashSize": "8",
+                "psramSize": "0",
+                "serialInterface": "USB_SERIAL_JTAG" 
             }
         },
         {
@@ -22,8 +24,6 @@
         }
     ],
     "connections": [
-        [ "esp:TX",  "$serialMonitor:RX", "", [] ],
-        [ "esp:RX",  "$serialMonitor:TX", "", [] ],
         [ "tft:VCC",  "esp:3V3.1",  "red",    [] ],
         [ "tft:GND",  "esp:GND.3","black",  [] ],
         [ "tft:MOSI", "esp:42",   "green",  [] ],

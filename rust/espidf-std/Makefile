@@ -1,4 +1,4 @@
-EXAMPLE ?= littlefs
+EXAMPLE ?= tft-st7735
 # MCU  	?= esp32c3
 MCU	   	?= esp32s3
 PARTITION_TABLE ?= partitions/large_spiffs_8MB.csv
@@ -32,6 +32,7 @@ endif
 
 ## Faz flash na placa (usa espflash com monitor integrado)
 ## https://github.com/esp-rs/esp-idf-template#flash
+## https://github.com/esp-rs/esp-idf-sys/issues/385 (Detalhes sobre partitions.csv)
 flash: build-rust
 	espflash flash $(ELF) $(if $(PARTITION_TABLE),--partition-table $(PARTITION_TABLE),) --monitor $(if $(PORT),--port $(PORT),)
 
@@ -42,7 +43,7 @@ monitor:
 ## Executa os testes (NO HOST)
 test:
 	export MCU=$(MCU) && \
-	cargo test --example $(EXAMPLE) --no-default-features --target "x86_64-unknown-linux-gnu"
+	cargo test --example $(EXAMPLE) --no-default-features --target "x86_64-unknown-linux-gnu" -- --nocapture
 
 ## Simula no Wokwi (requer extensão Wokwi no VS Code ou wokwi-cli)
 ## Acontece que o wokwi não suporta o partitions.csv https://github.com/wokwi/wokwi-features/issues/523
