@@ -1,4 +1,4 @@
-EXAMPLE ?= tft-st7735
+EXAMPLE ?= littlefs
 # MCU  	?= esp32c3
 MCU	   	?= esp32s3
 PARTITION_TABLE ?= partitions/large_spiffs_8MB.csv
@@ -43,6 +43,7 @@ monitor:
 ## Executa os testes (NO HOST)
 test:
 	export MCU=$(MCU) && \
+	export RUST_BACKTRACE=1 && \
 	cargo test --example $(EXAMPLE) --no-default-features --target "x86_64-unknown-linux-gnu" -- --nocapture
 
 ## Simula no Wokwi (requer extensão Wokwi no VS Code ou wokwi-cli)

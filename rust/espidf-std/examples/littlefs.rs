@@ -23,14 +23,15 @@
 //! (Sim, mesmo usando LittleFS, a partição ainda é chamada "spiffs" por convenção)
 
 use std::fs::{File, OpenOptions};
-use std::io::{BufReader, Read, Write};
+use std::io::{BufReader, Write};
+use std::path;
 use std::str::SplitWhitespace;
 use std::time::{Duration, SystemTime};
 
 use espidf_std::prelude::*;
 
 // ls -l $dir
-fn run_ls(dir: &str) -> Result<()> {
+fn run_ls(dir: &path::PathBuf) -> Result<()> {
     let now = SystemTime::now();
     for entry in std::fs::read_dir(dir)? {
         let entry = entry?;
@@ -51,33 +52,26 @@ fn run_ls(dir: &str) -> Result<()> {
 }
 
 // cat $file
-fn run_cat(file: &str) -> Result<()> {
+fn run_cat(file: &path::PathBuf) -> Result<()> {
     let f = File::open(file)?;
 
     // despejar todo o arquivo na saída padrão
-    let mut reader = BufReader::new(f);
-    let mut buffer = [0u8; 64];
-    loop {
-        let n = reader.read(&mut buffer)?;
-        if n == 0 {
-            break;
-        }
-        std::io::stdout().write_all(&buffer[..n])?;
-    }
+    let mut reader = BufReader::with_capacity(128, f);
+    std::io::copy(&mut reader, &mut std::io::stdout())?;
     println!();
 
     Ok(())
 }
 
 // echo "Hello, LittleFS!" > $file
-fn run_echo_file(file: &str, contents: &str) -> Result<()> {
+fn run_echo_file(file: &path::PathBuf, contents: &str) -> Result<()> {
     let mut f = File::create(file)?;
     f.write_all(contents.as_bytes())?;
     Ok(())
 }
 
 // echo "Hello again!" >> $file
-fn run_append_file(file: &str, contents: &str) -> Result<()> {
+fn run_append_file(file: &path::PathBuf, contents: &str) -> Result<()> {
     let mut f = OpenOptions::new()
         .append(true)
         .open(file)?;
@@ -86,7 +80,7 @@ fn run_append_file(file: &str, contents: &str) -> Result<()> {
 }
 
 // cp $src $dst
-fn run_cp(src: &str, dst: &str) -> Result<()> {
+fn run_cp(src: &path::PathBuf, dst: &path::PathBuf) -> Result<()> {
     let mut src_f = File::open(src)?;
     let mut dst_f = File::create(dst)?;
     std::io::copy(&mut src_f, &mut dst_f)?;
@@ -94,102 +88,107 @@ fn run_cp(src: &str, dst: &str) -> Result<()> {
 }
 
 // rm $file
-fn run_rm(file: &str) -> Result<()> {
+fn run_rm(file: &path::PathBuf) -> Result<()> {
     std::fs::remove_file(file)?;
     Ok(())
 }
 
-fn run_mkdir(dir: &str) -> Result<()> {
+fn run_mkdir(dir: &path::PathBuf) -> Result<()> {
     std::fs::create_dir(dir)?;
     Ok(())
 }
 
-fn run_rmdir(dir: &str) -> Result<()> {
+fn run_rmdir(dir: &path::PathBuf) -> Result<()> {
     std::fs::remove_dir(dir)?;
     Ok(())
 }
 
-fn test_filesystem(mount_point: &str) -> Result<()> {
-    log::info!("ls {mount_point}");
+fn test_filesystem(mount_point: &path::PathBuf) -> Result<()> {
+    log::info!("ls {}", mount_point.display());
     run_ls(mount_point)?;
 
-    let test_file = &format!("{}/teste.txt", mount_point);
-    log::info!("cat {test_file}");
+    let test_file = &mount_point.join("teste.txt");
+    log::info!("cat {}", test_file.display());
     run_cat(test_file).or_else(|e| {
         log::warn!("Falha ao ler arquivo de teste: {e:?}");
         Result::Ok(())
     })?;
 
     let content = "Ola, LittleFS!";
-    log::info!("echo '{}' > {test_file}", content);
+    log::info!("echo '{}' > {}", content, test_file.display());
     run_echo_file(test_file, content)?;
 
     let content = "Tchau, LittleFS!";
-    log::info!("echo '{}' >> {test_file}", content);
+    log::info!("echo '{}' >> {}", content, test_file.display());
     run_append_file(test_file, content)?;
     
-    log::info!("cat {test_file}");
+    log::info!("cat {}", test_file.display());
     run_cat(test_file)?;
 
     // Copiar arquivo
-    let copy_file = &format!("{}/teste_copy.txt", mount_point);
-    log::info!("cp {test_file} {copy_file}");
+    let copy_file = &mount_point.join("teste_copy.txt");
+    log::info!("cp {} {}", test_file.display(), copy_file.display());
     run_cp(test_file, copy_file)?;
 
     // Listagem
-    log::info!("ls {mount_point}");
+    log::info!("ls {}", mount_point.display());
     run_ls(mount_point)?;
 
     // Remover arquivo
-    log::info!("rm {test_file}");
+    log::info!("rm {}", test_file.display());
     run_rm(test_file)?;
 
     Ok(())
 }
 
-fn resolve_path(base: &str, path: &str) -> String {
-    if path.is_empty() {
-        base.to_string()
-    } else if path.starts_with("/") {
-        path.to_string()
-    } else {
-        format!("{}/{}", base, path)
-    }
+fn resolve_path(base_path: &path::PathBuf, path: Option<&str>) -> Result<path::PathBuf> {
+    let resolved = match path.filter(|p| !p.is_empty()) {
+        None => base_path.clone(),
+        Some(p) => {
+            let p = std::path::Path::new(p);
+            if p.is_absolute() { p.to_path_buf() } else { base_path.join(p) }
+        }
+    };
+
+    Ok(path::absolute(resolved)?)
 }
 
-fn run_cmd(wd: &mut String, cmd: &str, parts: &mut SplitWhitespace) -> Result<()> {
+fn run_cmd(wd: &mut path::PathBuf, cmd: &str, parts: &mut SplitWhitespace) -> Result<()> {
     match cmd {
         "cd" => {
-            let path = resolve_path(&wd, parts.next().unwrap_or(""));
-            wd.clone_from(&path);
+            let path = resolve_path(wd, parts.next())?;
+            // Verifica se existe
+            if !path.is_dir() {
+                log::error!("Diretório não encontrado: {}", path.display());
+            } else {
+                let path = path.canonicalize()?;
+                wd.clone_from(&path);
+            }
         }
         "ls" => {
-            let path = resolve_path(&wd, parts.next().unwrap_or(""));
+            let path = resolve_path(wd, parts.next())?;
             run_ls(&path)?;
         }
         "cat" => {
-            let path = resolve_path(&wd, parts.next().unwrap_or(""));
+            let path = resolve_path(wd, parts.next())?;
             run_cat(&path)?;
         }
         "rm" => {
-            let path = resolve_path(&wd, parts.next().unwrap_or(""));
+            let path = resolve_path(wd, parts.next())?;
             run_rm(&path)?;
         }
         "cp" => {
-            if let (Some(src), Some(dst)) = (parts.next(), parts.next()) {
-                let src = resolve_path(&wd, src);
-                let dst = resolve_path(&wd, dst);
-                run_cp(&src, &dst)?;
-            } else {
-                log::error!("Uso: cp <origem> <destino>");
-            }
+            let (src, dst) = (parts.next(), parts.next());
+            let src = resolve_path(wd, src)?;
+            let dst = resolve_path(wd, dst)?;
+            run_cp(&src, &dst)?;
         }
         "mkdir" => {
-            let path = resolve_path(&wd, parts.next().unwrap_or(""));
+            let path = resolve_path(wd, parts.next())?;
             run_mkdir(&path)?;
         }
         "rmdir" => {
-            let path = resolve_path(&wd, parts.next().unwrap_or(""));
+            let path = resolve_path(wd, parts.next())?;
             run_rmdir(&path)?;
         }
         "echo" => {
@@ -197,11 +196,11 @@ fn run_cmd(wd: &mut String, cmd: &str, parts: &mut SplitWhitespace) -> Result<()
 
             if let Some(op_pos) = tokens.iter().rposition(|&s| s == ">" || s == ">>") {
                 let op = tokens[op_pos];
-                let file_part = tokens.get(op_pos + 1).copied().unwrap_or("");
+                let file_part = tokens.get(op_pos + 1).copied();
                 let mut content = tokens[..op_pos].join(" ");
-                content.push_str("\n");
+                content.push('\n');
 
-                let path = resolve_path(&wd, file_part);
+                let path = resolve_path(wd, file_part)?;
 
                 if op == ">>" {
                     run_append_file(&path, &content)?;
@@ -214,7 +213,7 @@ fn run_cmd(wd: &mut String, cmd: &str, parts: &mut SplitWhitespace) -> Result<()
             }
         }
         "test" => {
-            test_filesystem(&wd)?;
+            test_filesystem(wd)?;
         }
         "help" | "?" => {
             log::info!("Comandos disponíveis:");
@@ -237,14 +236,17 @@ fn run_cmd(wd: &mut String, cmd: &str, parts: &mut SplitWhitespace) -> Result<()
 }
 
 fn run_terminal(mount_point: &str) -> Result<()> {
-    let mut wd = mount_point.to_string();
+    let mut wd = path::PathBuf::from(mount_point);
 
     loop {
-        print!("esp32> ");
+        print!("{}# ", wd.display());
         std::io::stdout().flush()?;
 
         let mut input = String::new();
-        std::io::stdin().read_line(&mut input)?;
+        if std::io::stdin().read_line(&mut input)? == 0 {
+            // EOF
+            return Ok(());
+        }
         let input = input.trim();
         let mut parts = input.split_whitespace();
         println!();
@@ -353,32 +355,35 @@ mod tests {
     #[test_log::test]
     fn test_littlefs() {
         // Testa a função de teste do filesystem em ./assets sem precisar do hardware
-        let mount_point = "./assets";
+        let mount_point = path::PathBuf::from("./assets");
         // Cria o diretório se não existir
-        std::fs::create_dir_all(mount_point).unwrap();
-        test_filesystem(mount_point).unwrap();
+        std::fs::create_dir_all(&mount_point).unwrap();
+        test_filesystem(&mount_point).unwrap();
+    }
+
+    fn run_cmds (wd: &mut path::PathBuf, cmds: &[&str]) -> Result<()> {
+        for cmd in cmds {
+            let mut parts = cmd.split_whitespace();
+            let cmd_name = parts.next().unwrap_or("");
+            println!("> {cmd}");
+            run_cmd(wd, cmd_name, &mut parts)
+                .map_err(|e| {
+                    log::error!("Erro ao executar comando '{cmd}': {e:?}");
+                    e
+                })?;
+            println!();
+        }
+        Ok(())
     }
 
     #[test_log::test]
     fn test_cmds() {
         // Testa a função de execução de comandos em ./assets sem precisar do hardware
-        let mount_point = "./assets";
+        let mut mount_point = path::PathBuf::from("./assets");
         // Cria o diretório se não existir
-        std::fs::create_dir_all(mount_point).unwrap();
+        std::fs::create_dir_all(&mount_point).unwrap();
 
-        fn run_cmds (wd: &mut String, cmds: &[&str]) -> Result<()> {
-            for cmd in cmds {
-                let mut parts = cmd.split_whitespace();
-                let cmd_name = parts.next().unwrap_or("");
-                println!("> {cmd}");
-                run_cmd(wd, cmd_name, &mut parts)?;
-                println!();
-            }
-            Ok(())
-        }
-
-        let wd = &mut mount_point.to_string();
-        run_cmds(wd, &[
+        run_cmds(&mut mount_point, &[
             "ls",
             "mkdir testdir",
             "cd testdir",
@@ -387,16 +392,12 @@ mod tests {
             "echo World >> testfile.txt",
             "cat testfile.txt",
             "cp testfile.txt copy.txt",
-        ]);
-
-
-        let wd = &mut mount_point.to_string();
-        run_cmds(wd, &[
+            "cd ..",
             "rm testdir/testfile.txt",
             "rm testdir/copy.txt",
             "rmdir testdir",
-        ]);
+        ]).unwrap();
 
-        assert!(std::fs::metadata(format!("{}/testdir", mount_point)).is_err());
+        assert!(std::fs::metadata(format!("{}/testdir", &mount_point.display())).is_err());
     }
 }
