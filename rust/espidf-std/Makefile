@@ -1,4 +1,4 @@
-EXAMPLE ?= littlefs
+EXAMPLE ?= gps
 # MCU  	?= esp32c3
 MCU	   	?= esp32s3
 PARTITION_TABLE ?= partitions/large_spiffs_8MB.csv
