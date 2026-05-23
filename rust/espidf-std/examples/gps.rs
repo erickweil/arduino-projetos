@@ -23,33 +23,36 @@ impl LineByLineIterator {
 
     /// Chama `reader` passando o espaço livre do buffer e incorpora os bytes escritos.
     pub fn fill_from(&mut self, reader: impl FnOnce(&mut [u8]) -> Result<usize>) -> Result<usize> {
+        if self.fill >= MAX_BUFFER {
+            log::warn!("Line buffer filled up");
+            // Descarta o conteúdo antigo e lê os novos dados.
+            self.fill = 0;
+        }
+
         let n = reader(&mut self.buf[self.fill..])?;
         self.fill += n;
-        if self.fill >= MAX_BUFFER {
-            self.fill = 0;
-            return Err("LineByLineIterator Buffer overflow: line too long".into());
-        }
         Ok(n)
     }
 
-    /// Tenta extrair a próxima linha completa do buffer. 
-    /// Retorna None se não houver uma linha completa (terminada em '\n').
-    pub fn next_line(&mut self) -> Option<String> {
-        let pos = self.buf[..self.fill].iter().position(|&b| b == b'\n')?;
-        let line = String::from_utf8_lossy(&self.buf[..pos])
-            .trim_end_matches('\r')
-            .trim()
-            .to_string();
-        // Desloca os bytes restantes para o início (sem realocar).
-        self.buf.copy_within(pos + 1..self.fill, 0);
-        self.fill -= pos + 1;
-        if line.is_empty() { None } else { Some(line) }
-    }
+    /// Atravessa o buffer procurando por linhas completas (terminadas em \n) e chama a callback
+    pub fn drain_lines(&mut self, mut f: impl FnMut(&str)) {
+        loop {
+            if self.fill == 0 { break; }
+            let Some(pos) = self.buf[..self.fill].iter().position(|&b| b == b'\n') else {
+                break; // Sem linha completa disponível
+            };
 
-    /// Retorna um iterador que extrai linhas completas do buffer até que não haja mais.
-    /// TODO: fazer sem alocar String
-    pub fn drain_lines(&mut self) -> impl Iterator<Item = String> + '_ {
-        std::iter::from_fn(|| self.next_line())
+            // Encontra o fim real da linha (sem \r)
+            let end = if pos > 0 && self.buf[pos - 1] == b'\r' { pos - 1 } else { pos };
+            if end > 0 {
+                if let Ok(line) = str::from_utf8(&self.buf[..end]) {
+                    f(line);
+                }
+            }
+            // Desloca os bytes restantes para o início (sem realocar).
+            self.buf.copy_within(pos + 1..self.fill, 0);
+            self.fill -= pos + 1;
+        }
     }
 }
 
@@ -113,28 +116,25 @@ espidf_only! {
             loop {
                 let bytes_read = line_iterator.fill_from(|buf| {
                     // 5 FreeRTOS ticks ~ 50 ms
-                    gps_uart.read(buf, 5).or_else(|e| {
-                        if e.code() == sys::ESP_ERR_TIMEOUT {
-                            Result::Ok(0)
-                        } else {
-                            Result::Err(Box::new(e))
-                        }
-                    })
+                    match gps_uart.read(buf, 5) {
+                        Ok(n) => Ok(n),
+                        Err(e) if e.code() == sys::ESP_ERR_TIMEOUT => Ok(0),
+                        Err(e) => Err(e.into()),
+                    }
                 }).or_else(|e| {
                     log::error!("Failed to read from GPS UART: {}", e);
                     Result::Ok(0)
                 })?;
-                
-                if bytes_read == 0 {
-                    break; // Sem mais dados disponíveis no momento
-                }
 
-                log::info!("Read {} bytes from GPS", bytes_read);
-                for line in line_iterator.drain_lines() {
+                line_iterator.drain_lines(|line| {
                     log::info!("GPS '{}'", line);
 
                     // Tenta parsear a linha como uma sentença NMEA
-                    nmea_parser.parse(&line).ok().map(|_| changed = true);
+                    nmea_parser.parse(line).ok().map(|_| changed = true);
+                });
+
+                if bytes_read == 0 {
+                    break; // Sem mais dados disponíveis no momento
                 }
             }
 
@@ -148,6 +148,7 @@ espidf_only! {
                 log::info!("SATELLITES IN VIEW: {:?}", nmea_parser.fix_satellites());
             }
 
+            // Devolve o controle para o FreeRTOS
             thread::sleep(Duration::from_millis(1));
         }
     }
@@ -181,17 +182,17 @@ $GPGGA,045252.000,3014.4273,N,09749.0628,W,1,09,1.3,206.9,M,-22.5,M,,0000*6F\r\n
             }).expect("Failed to fill LineByLineIterator");
 
             // Tenta extrair linhas completas a cada byte alimentado
-            for line in line_iterator.drain_lines() {
+            line_iterator.drain_lines(|line| {
                 println!("GPS '{}'", line);
                 lines_read += 1;
 
-                match nmea_parser.parse(&line) {
+                match nmea_parser.parse(line) {
                     Ok(sentence) => {
                         println!("Parsed NMEA sentence: {:?}", sentence);
                     },
                     Err(e) => println!("Failed to parse NMEA sentence: {}", e),
                 }
-            }
+            });
         }
         
         assert_eq!(lines_read, 6);
@@ -216,6 +217,14 @@ $GPGGA,045252.000,3014.4273,N,09749.0628,W,1,09,1.3,206.9,M,-22.5,M,,0000*6F\r\n
             Ok(to_write)
         });
 
-        assert!(result.is_err());
+        assert_eq!(result.unwrap(), MAX_BUFFER);
+
+        let result = line_iterator.fill_from(|buf| {
+            // write 1 byte
+            buf[0] = b'B';
+            Ok(1)
+        });
+        assert_eq!(result.unwrap(), 1);
+        assert_eq!(line_iterator.fill, 1); // O buffer foi resetado e agora tem apenas 1 byte
     }
 }
