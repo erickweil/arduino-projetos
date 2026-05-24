@@ -77,7 +77,7 @@ Esp32C3 Super Mini:
 
 Heltec Wireless Tracker (Esp32S3FN8):
 - [x] ./examples/tft-st7735.rs Utilizar Display ST7735
-- [ ] Interação com módulo GPS via UART
+- [x] ./examples/gps.rs Interação com módulo GPS via UART
 - [ ] Comunicação LoRaWAN
 
 Se tudo isso funcionar criar novo projeto de rastreio em rust. 

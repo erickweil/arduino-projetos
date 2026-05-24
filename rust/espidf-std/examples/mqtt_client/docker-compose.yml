@@ -1,0 +1,33 @@
+services:
+  mqtt-server:
+    image: eclipse-mosquitto:2.1-alpine
+    ports:
+      - "1883:1883" #default mqtt port
+      - "9001:9001" #default mqtt port for websockets
+    volumes:
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    configs:
+      - source: mosquitto_conf
+        target: /mosquitto/config/mosquitto.conf
+  mqttx-client:
+    # Go to http://localhost:8080 and add a connection with the following settings:
+    # ws://localhost:9001
+    image: emqx/mqttx-web:latest
+    ports:
+      - "8080:80" #mqttx web interface
+
+volumes:
+  mosquitto_data:
+  mosquitto_log:
+
+configs:
+  mosquitto_conf:
+    content: |
+      persistence true
+      persistence_location /mosquitto/data/
+      allow_anonymous true
+      listener 1883 0.0.0.0
+      protocol mqtt
+      listener 9001 0.0.0.0
+      protocol websockets

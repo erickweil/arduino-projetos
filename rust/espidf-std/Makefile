@@ -1,4 +1,4 @@
-EXAMPLE ?= gps
+EXAMPLE ?= mqtt_client
 # MCU  	?= esp32c3
 MCU	   	?= esp32s3
 PARTITION_TABLE ?= partitions/large_spiffs_8MB.csv

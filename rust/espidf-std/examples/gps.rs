@@ -1,3 +1,5 @@
+#![allow(unused_imports)]
+
 use espidf_std::prelude::*;
 use std::{thread, time::Duration};
 use nmea::Nmea;
@@ -167,7 +169,7 @@ $GPGGA,045201.000,3014.3864,N,09748.9411,W,1,10,1.2,200.8,M,-22.5,M,,0000*6C\r\n
 $GPRMC,045251.000,A,3014.4275,N,09749.0626,W,0.51,217.94,030913,,,A*7D\r\n\
 $GPGGA,045252.000,3014.4273,N,09749.0628,W,1,09,1.3,206.9,M,-22.5,M,,0000*6F\r\n";
 
-    #[test]
+    #[test_log::test]
     fn test_nmea_parsing_byte_by_byte() {
         let mut nmea_parser = Nmea::default();
         
@@ -205,7 +207,7 @@ $GPGGA,045252.000,3014.4273,N,09749.0628,W,1,09,1.3,206.9,M,-22.5,M,,0000*6F\r\n
         println!("Satellites in view: {:?}", nmea_parser.fix_satellites());
     }
 
-    #[test]
+    #[test_log::test]
     fn test_line_overflow() {
         let mut line_iterator = LineByLineIterator::new();
         let long_line = "A".repeat(MAX_BUFFER + 10) + "\n";
