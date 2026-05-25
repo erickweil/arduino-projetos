@@ -1,12 +1,12 @@
-/// Blink de LED e servidor HTTP usando ESP-IDF e Rust
-/// 
-/// Conecte-se ao wifi e então acesse http://192.168.71.1/
-/// 
-/// Baseado em https://github.com/esp-rs/esp-idf-svc/blob/master/examples/wifi.rs
-/// https://github.com/esp-rs/esp-idf-svc/blob/master/examples/http_server.rs
-/// 
+//! Blink de LED e servidor HTTP usando ESP-IDF e Rust
+//! 
+//! Conecte-se ao wifi e então acesse http://192.168.71.1/
+//! 
+//! Baseado em https://github.com/esp-rs/esp-idf-svc/blob/master/examples/wifi.rs
+//! https://github.com/esp-rs/esp-idf-svc/blob/master/examples/http_server.rs
+//! 
 
-// Importações e funções comuns a todos os ambientes (host e ESP-IDF)
+/// Importações e funções comuns a todos os ambientes (host e ESP-IDF)
 use espidf_std::prelude::*;
 use std::{thread, time::Duration};
 
@@ -163,7 +163,7 @@ espidf_only! {
             Configuration::AccessPoint(AccessPointConfiguration {
                 ssid: SSID.try_into().unwrap(),
                 ssid_hidden: false,
-                auth_method: auth_method,
+                auth_method,
                 password: PASSWORD.try_into().unwrap(),
                 channel: CHANNEL,
                 ..Default::default()
@@ -172,7 +172,7 @@ espidf_only! {
             Configuration::Client(ClientConfiguration {
                 ssid: SSID.try_into().unwrap(),
                 bssid: None,
-                auth_method: auth_method,
+                auth_method,
                 password: PASSWORD.try_into().unwrap(),
                 channel: None,
                 pmf_cfg: esp_idf_svc::wifi::PmfConfiguration::Capable { required: false },

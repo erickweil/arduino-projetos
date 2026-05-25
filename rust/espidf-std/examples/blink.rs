@@ -10,10 +10,10 @@ fn delay(ms: u64) {
 // E eles podem ser testados normalmente no host, sem precisar rodar na placa.
 fn criar_contador() -> impl FnMut() -> u64 {
     let mut count: u64 = 0;
-    return move || {
+    move || {
         count += 1;
         count
-    };
+    }
 }
 
 // Código que usa recursos do ESP-IDF deve ficar dentro do macro espidf_only!

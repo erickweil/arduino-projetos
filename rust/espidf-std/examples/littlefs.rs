@@ -141,9 +141,9 @@ fn test_filesystem(mount_point: &path::PathBuf) -> Result<()> {
     Ok(())
 }
 
-fn resolve_path(base_path: &path::PathBuf, path: Option<&str>) -> Result<path::PathBuf> {
+fn resolve_path(base_path: &path::Path, path: Option<&str>) -> Result<path::PathBuf> {
     let resolved = match path.filter(|p| !p.is_empty()) {
-        None => base_path.clone(),
+        None => base_path.to_path_buf(),
         Some(p) => {
             let p = std::path::Path::new(p);
             if p.is_absolute() { p.to_path_buf() } else { base_path.join(p) }

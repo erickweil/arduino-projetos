@@ -6,6 +6,7 @@ edition = "2024"
 resolver = "2"
 
 [profile.release]
+codegen-units = 1     # LLVM can perform better optimizations using a single thread
 opt-level = "s"
 
 [profile.dev]
@@ -41,9 +42,18 @@ nmea = { version = "0.7.0", default-features = false, features = ["std", "GNSS"]
 [dev-dependencies]
 test-log = { version = "*" }
 
-# https://github.com/esp-rs/esp-idf-svc/blob/master/examples/sd_spi_littlefs.rs
-[[package.metadata.esp-idf-sys.extra_components]]
-remote_component = { name = "joltwallet/littlefs", version = "1.14" }
+[package.metadata.esp-idf-sys]
+extra_components = [
+    # https://github.com/esp-rs/esp-idf-svc/blob/master/examples/sd_spi_littlefs.rs
+    { remote_component = { name = "joltwallet/littlefs", version = "1.14" } },
+    # https://github.com/esp-rs/esp-idf-svc/blob/master/examples/mqtt_client.rs
+    { remote_component = { name = "espressif/mqtt", version = "1.*" } }
+]
 
 [build-dependencies]
 embuild = "0.33"
+
+[workspace.lints.clippy]
+large_stack_frames = "deny"
+boxed_local = "warn"
+large_types_passed_by_value = "warn"

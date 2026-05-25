@@ -46,11 +46,10 @@ impl LineByLineIterator {
 
             // Encontra o fim real da linha (sem \r)
             let end = if pos > 0 && self.buf[pos - 1] == b'\r' { pos - 1 } else { pos };
-            if end > 0 {
-                if let Ok(line) = str::from_utf8(&self.buf[..end]) {
-                    f(line);
-                }
+            if end > 0 && let Ok(line) = str::from_utf8(&self.buf[..end]) {
+                f(line);
             }
+            
             // Desloca os bytes restantes para o início (sem realocar).
             self.buf.copy_within(pos + 1..self.fill, 0);
             self.fill -= pos + 1;
@@ -105,7 +104,7 @@ espidf_only! {
         // Criar na HEAP, isso consome memória demais!
         // https://github.com/AeroRust/nmea/issues/2
         // TODO: pesquisar outra biblioteca mais leve? o TinyGPS++ fazia como? 
-        let mut nmea_parser = Box::new(Nmea::default());
+        let mut nmea_parser: Box<Nmea> = Box::default();
         // 12304 bytes
         // log::info!("NMEA parser initialized, struct size in bytes: {:?}", std::mem::size_of_val(&*nmea_parser));
 
@@ -132,7 +131,9 @@ espidf_only! {
                     log::info!("GPS '{}'", line);
 
                     // Tenta parsear a linha como uma sentença NMEA
-                    nmea_parser.parse(line).ok().map(|_| changed = true);
+                    if nmea_parser.parse(line).is_ok() {
+                        changed = true;
+                    }
                 });
 
                 if bytes_read == 0 {
@@ -172,7 +173,7 @@ $GPGGA,045252.000,3014.4273,N,09749.0628,W,1,09,1.3,206.9,M,-22.5,M,,0000*6F\r\n
     #[test_log::test]
     fn test_nmea_parsing_byte_by_byte() {
         let mut nmea_parser = Nmea::default();
-        
+
         let mut line_iterator = LineByLineIterator::new();
         let mut lines_read = 0;
 

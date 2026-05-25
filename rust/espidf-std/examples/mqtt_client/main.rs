@@ -1,6 +1,20 @@
-/// Baseado em https://github.com/esp-rs/esp-idf-svc/blob/master/examples/mqtt_client.rs
+//! Baseado em https://github.com/esp-rs/esp-idf-svc/blob/master/examples/mqtt_client.rs
+//! Note: On ESP-IDF v6.0+, the MQTT component was moved out of the main tree. To enable it,
+//! add the following to your `Cargo.toml`:
+//! ```toml
+//! [[package.metadata.esp-idf-sys.extra_components]]
+//! remote_component = { name = "espressif/mqtt", version = "1.*" }
+//! ```
+//! 
 use espidf_std::prelude::*;
 use std::{time::Duration};
+
+/// Configurações de Wi-Fi
+/// O intervalo permitido é de [8, 84], o que corresponde a uma potência real de 2 dBm a 20 dBm.
+/// A unidade do parâmetro de potência (power) é de 0.25 dBm.
+/// 34 * 0.25 dBm = 8.5 dBm
+/// [No esp32c3 precisa disso ou não funciona o wifi] 
+const MAX_RADIO_POWER: Option<i8> = None; // Some(34);
 
 const SSID: &str = match option_env!("WIFI_SSID") {
     Some(ssid) => ssid,
@@ -11,12 +25,15 @@ const PASSWORD: &str = match option_env!("WIFI_PASS") {
     None => "",
 };
 
-const MQTT_URL: &str = "mqtt://host.wokwi.internal:1883";
+const MQTT_URL: &str = match option_env!("MQTT_URL") {
+    Some(url) => url,
+    None => "mqtt://host.wokwi.internal:1883",
+};
 const MQTT_CLIENT_ID: &str = "esp-mqtt-demo";
 const MQTT_TOPIC: &str = "esp-mqtt-demo";
 
 espidf_only! {
-    
+    use esp_idf_svc::sys::esp_wifi_set_max_tx_power;
     use esp_idf_svc::eventloop::EspSystemEventLoop;
     use esp_idf_svc::hal::peripherals::Peripherals;
     use esp_idf_svc::mqtt::client::*;
@@ -35,99 +52,71 @@ espidf_only! {
         let mut wifi = BlockingWifi::wrap(&mut esp_wifi, sys_loop.clone())?;
         wifi_config(&mut wifi)?;
 
-        let (mut client, mut conn) = mqtt_create(MQTT_URL, MQTT_CLIENT_ID)?;
+        let mut client = mqtt_create(MQTT_URL, MQTT_CLIENT_ID)?;
+        let mut counter = 0;
 
-        run(&mut client, &mut conn, MQTT_TOPIC)?;
+        log::info!("Starting MQTT publish on topic \"{MQTT_TOPIC}\"...");
+        loop {
+            let payload = format!("Hello MQTT! Counter: {counter}");
+            
+            client.enqueue(MQTT_TOPIC, QoS::AtMostOnce, false, payload.as_bytes())?;
+            log::info!("Published message {counter}");
+            
+            counter += 1;
 
-        Ok(())
+            std::thread::sleep(Duration::from_secs(2));
+        }
     }
 
-    fn run(
-        client: &mut EspMqttClient<'_>,
-        connection: &mut EspMqttConnection,
-        topic: &str,
-    ) -> Result<()> {
-        std::thread::scope(|s| {
-            log::info!("About to start the MQTT client");
-
-            // Need to immediately start pumping the connection for messages, or else subscribe() and publish() below will not work
-            // Note that when using the alternative constructor - `EspMqttClient::new_cb` - you don't need to
-            // spawn a new thread, as the messages will be pumped with a backpressure into the callback you provide.
-            // Yet, you still need to efficiently process each message in the callback without blocking for too long.
-            //
-            // Note also that if you go to http://tools.emqx.io/ and then connect and send a message to topic
-            // "esp-mqtt-demo", the client configured here should receive it.
-            std::thread::Builder::new()
-                .stack_size(6000)
-                .spawn_scoped(s, move || {
-                    log::info!("MQTT Listening for messages");
-
-                    while let Ok(event) = connection.next() {
-                        log::info!("[Queue] Event: {}", event.payload());
-                    }
-
-                    log::info!("Connection closed");
-                })
-                .unwrap();
-
-            loop {
-                if let Err(e) = client.subscribe(topic, QoS::AtMostOnce) {
-                    log::error!("Failed to subscribe to topic \"{topic}\": {e}, retrying...");
-
-                    // Re-try in 0.5s
-                    std::thread::sleep(Duration::from_millis(500));
-
-                    continue;
-                }
-
-                log::info!("Subscribed to topic \"{topic}\"");
-
-                // Just to give a chance of our connection to get even the first published message
-                std::thread::sleep(Duration::from_millis(500));
-
-                let payload = "Hello from esp-mqtt-demo!";
-
-                loop {
-                    client.enqueue(topic, QoS::AtMostOnce, false, payload.as_bytes())?;
-
-                    log::info!("Published \"{payload}\" to topic \"{topic}\"");
-
-                    let sleep_secs = 2;
-
-                    log::info!("Now sleeping for {sleep_secs}s...");
-                    std::thread::sleep(Duration::from_secs(sleep_secs));
-                }
-            }
-        })
-    }
-
-    fn mqtt_create(
-        url: &str,
-        client_id: &str,
-    ) -> Result<(EspMqttClient<'static>, EspMqttConnection)> {
-        let (mqtt_client, mqtt_conn) = EspMqttClient::new(
+    fn mqtt_create(url: &str, client_id: &str) -> Result<EspMqttClient<'static>> {
+        // Com new_cb, os eventos são processados no callback — sem necessidade de thread separada.
+        let mqtt_client = EspMqttClient::new_cb(
             url,
             &MqttClientConfiguration {
                 client_id: Some(client_id),
                 ..Default::default()
             },
+            |event| {
+                log::info!("MQTT Event: {}", event.payload());
+            },
         )?;
 
-        Ok((mqtt_client, mqtt_conn))
+        Ok(mqtt_client)
     }
 
     fn wifi_config(
         wifi: &mut BlockingWifi<&mut EspWifi>,
-    ) -> Result<()> {        
+    ) -> Result<()> {
+        let auth_method = if PASSWORD.is_empty() {
+            AuthMethod::None
+        } else {
+            AuthMethod::WPAWPA2Personal
+        };
+
         wifi.set_configuration(&Configuration::Client(ClientConfiguration {
-            ssid: SSID.try_into().unwrap(),
-            password: PASSWORD.try_into().unwrap(),
-            auth_method: AuthMethod::None,
+            ssid: SSID.try_into()?,
+            password: PASSWORD.try_into()?,
+            auth_method,
+            channel: None,
+            pmf_cfg: esp_idf_svc::wifi::PmfConfiguration::Capable { required: false },
             ..Default::default()
         }))?;
 
         wifi.start()?;
         log::info!("Wifi started");
+
+        // --- Redução da Potência de Transmissão (Hardware Brownout Fix) ---
+        // O problema: o rádio RF liga e puxa um pico de corrente repentino que pode passar de 300mA.
+        // Reduzir a potência de transmissão (ironicamente) ajuda a estabilizar o sinal nessas placas, pois diminui o ruído no circuito regulador de tensão interno.
+        // SAFETY: é só um binding do código C
+        if let Some(power) = MAX_RADIO_POWER {
+            unsafe {
+                let err = esp_wifi_set_max_tx_power(power);
+                if err != 0 {
+                    log::warn!("Aviso: Falha ao ajustar TX power. Codigo do erro: {}", err);
+                }
+            }
+        }
 
         wifi.connect()?;
         log::info!("Wifi connected");
@@ -135,6 +124,9 @@ espidf_only! {
         wifi.wait_netif_up()?;
         log::info!("Wifi netif up");
 
+        let ip_info = wifi.wifi().sta_netif().get_ip_info()?;
+        log::info!("Running on IP {}", ip_info.ip);
+        
         Ok(())
     }
 }
