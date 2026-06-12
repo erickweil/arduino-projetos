@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LED</title>
+    <style>
+        body { text-align: center; }
+        button { padding: 10px 20px; color: #fff; background-color: #007BFF; }
+        iframe { border: none; height: 150px; }
+    </style>
+</head>
+<body>
+    <h1>Controle do led</h1>
+    <iframe src="/led" ></iframe>
+    <form method="POST" action="/led">
+        <button id="btn" type="submit">Ligar/Desligar LED</button>
+    </form>
+</body>
+</html>

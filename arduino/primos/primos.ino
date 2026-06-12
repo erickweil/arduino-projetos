@@ -1,5 +1,5 @@
 #include "Arduino.h"
-#define PISCAR_LED
+// #define PISCAR_LED
 
 #ifdef HELTEC_BOARD
 #include "HT_st7735.h"

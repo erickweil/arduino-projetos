@@ -1,0 +1,13 @@
+[wokwi]
+version = 1
+gdbServerPort = 3333
+firmware="target/flasher_args.json"
+#elf = "target/xtensa-esp32s3-espidf/release/examples/littlefs"
+#firmware = "target/xtensa-esp32s3-espidf/release/examples/littlefs"
+# elf = "target/xtensa-esp32s3-espidf/release/examples/hello"
+# firmware = "target/xtensa-esp32s3-espidf/release/examples/hello"
+
+# Forward http://localhost:8080 to port 80 on the simulated ESP32:
+[[net.forward]]
+from = "localhost:8080"
+to = "target:80"

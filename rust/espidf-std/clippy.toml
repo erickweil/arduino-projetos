@@ -1,0 +1,7 @@
+# https://rust-lang.github.io/rust-clippy/master/index.html
+
+#  The maximum allowed stack size for functions in bytes (default: 512000)
+stack-size-threshold = 8192
+
+# The maximum size of objects (in bytes) that will be linted. Larger objects are ok on the heap (default: 200)
+too-large-for-stack = 64

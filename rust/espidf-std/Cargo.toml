@@ -1,0 +1,59 @@
+[package]
+name = "espidf-std"
+version = "0.1.0"
+authors = ["Erick Weil <erick.weil@ifro.edu.br>"]
+edition = "2024"
+resolver = "2"
+
+[profile.release]
+codegen-units = 1     # LLVM can perform better optimizations using a single thread
+opt-level = "s"
+
+[profile.dev]
+debug = true    # Symbols are nice, and they don't increase the size on Flash
+opt-level = "z"
+
+[features]
+# Feature base: habilita toda a stack ESP-IDF
+espidf = ["dep:esp-idf-svc", "dep:embassy-time"]
+
+# --- Chips suportados ---
+# Adicionar aqui novos chips conforme necessário.
+# Cada chip deve depender de "espidf" (e futuramente de features específicas do chip).
+
+# Esp32-C3 SuperMini (RISC-V, target: riscv32imc-esp-espidf)
+esp32c3 = ["espidf"]
+
+# Heltec Wireless Tracker (ESP32-S3FN8, Xtensa, target: xtensa-esp32s3-espidf)
+esp32s3 = ["espidf"]
+
+# genérico para desenvolvimento local (para rust-analyzer funcionar)
+default = ["espidf"]
+
+[dependencies]
+log = "0.4"
+esp-idf-svc = { version = "0.52.1", features = ["critical-section", "embassy-time-driver", "embassy-sync"], optional = true }
+# Remove `generic-queue-8` if you plan to use `embassy-time` WITH `embassy-executor`
+embassy-time = { version = "0.5", features = ["generic-queue-8"], optional = true }
+embedded-graphics = "0.8.2"
+mipidsi = "0.10.0"
+nmea = { version = "0.7.0", default-features = false, features = ["std", "GNSS"] }
+
+[dev-dependencies]
+test-log = { version = "*" }
+
+[package.metadata.esp-idf-sys]
+extra_components = [
+    # https://github.com/esp-rs/esp-idf-svc/blob/master/examples/sd_spi_littlefs.rs
+    { remote_component = { name = "joltwallet/littlefs", version = "1.14" } },
+    # https://github.com/esp-rs/esp-idf-svc/blob/master/examples/mqtt_client.rs
+    { remote_component = { name = "espressif/mqtt", version = "1.*" } }
+]
+
+[build-dependencies]
+embuild = "0.33"
+
+[workspace.lints.clippy]
+large_stack_frames = "deny"
+boxed_local = "warn"
+large_types_passed_by_value = "warn"

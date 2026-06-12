@@ -1,0 +1,43 @@
+{
+    "version": 1,
+    "editor": "wokwi",
+    "author": "Erick Weil <erick.weil@ifro.edu.br>",
+    "parts": [
+        {
+            "type": "board-esp32-s3-devkitc-1",
+            "id": "esp",
+            "top": 0,
+            "left": 0,
+            "rotate": 90,
+            "attrs": {
+                "flashSize": "8",
+                "psramSize": "0",
+                "serialInterface": "USB_SERIAL_JTAG" 
+            }
+        },
+        {
+            "type": "chip-st7735",
+            "id": "tft",
+            "top": 150,
+            "left": -64,
+            "rotate": 90
+        }
+    ],
+    "connections": [
+        [ "tft:VCC",  "esp:3V3.1",  "red",    [] ],
+        [ "tft:GND",  "esp:GND.3","black",  [] ],
+        [ "tft:MOSI", "esp:42",   "green",  [] ],
+        [ "tft:SCK",  "esp:41",   "yellow", [] ],
+        [ "tft:DC",  "esp:40",   "purple", [] ],
+        [ "tft:RST",  "esp:39",   "blue",   [] ],
+        [ "tft:CS",   "esp:38",   "orange", [] ],
+        [ "tft:LED",  "esp:21",   "white",  [] ]
+    ],
+    "serialMonitor": {
+        "display": "terminal",
+        "convertEol": true
+    },
+    "dependencies": {
+    	"chip-st7735": "github:martysweet/st7735-wokwi-chip@1.0.4"
+    }
+}

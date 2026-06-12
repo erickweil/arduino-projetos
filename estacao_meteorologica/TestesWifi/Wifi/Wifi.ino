@@ -3,8 +3,8 @@
 // #include <ESP8266HTTPClient.h>
 #include <WiFiClient.h>
 
-#define WIFI_SSID "SSID-DA-REDE"
-#define WIFI_PASS "SENHA-DA-REDE"
+#define WIFI_SSID "ErickWifi"
+#define WIFI_PASS "12345678"
 
 // https://github.com/esp8266/Arduino/blob/master/libraries/ESP8266HTTPClient/examples/BasicHttpClient/BasicHttpClient.ino
 
